@@ -1,5 +1,10 @@
 from setuptools import setup, find_packages
-from tvi_footballindex.version import __version__
+#from tvi_footballindex.version import __version__
+
+def read_version():
+    with open("tvi_footballindex/version.py") as f:
+        exec(f.read())
+        return locals()['__version__']
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
@@ -9,7 +14,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="tvi-footballindex",
-    version=__version__,
+    version=read_version(),
     author="Luis Doutor Simoes",
     author_email="luis.d.simoes@tecnico.ulisboa.pt",
     description="A Python library for calculating Tactical Versatility Index (TVI) in football analytics",
