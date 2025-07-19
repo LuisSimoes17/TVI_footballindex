@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tvi-footballindex"
+dynamic = ["version"]
+description = "A Python library for calculating Tactical Versatility Index (TVI) in football analytics"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Luis Doutor Simoes", email = "luis.d.simoes@tecnico.ulisboa.pt"},
+]
+keywords = [
+    "football", 
+    "soccer", 
+    "analytics", 
+    "tactical", 
+    "versatility", 
+    "index", 
+    "sports", 
+    "data-analysis",
+    "tvi",
+    "f24",
+    "performance-metrics"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Sports Analysts",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9", 
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Games/Entertainment :: Sport",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "pandas>=1.3.0",
+    "numpy>=1.20.0",
+    "tqdm>=4.60.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov>=2.0",
+    "black>=21.0",
+    "flake8>=3.8",
+    "mypy>=0.800",
+    "jupyter>=1.0.0",
+]
+docs = [
+    "sphinx>=4.0",
+    "sphinx-rtd-theme>=1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/LuisSimoes17/TVI_footballindex"
+Repository = "https://github.com/LuisSimoes17/TVI_footballindex.git"
+Issues = "https://github.com/LuisSimoes17/TVI_footballindex/issues"
+
+[tool.setuptools.dynamic]
+version = {attr = "tvi_footballindex.version.__version__"}
+
+[tool.setuptools.packages.find]
+exclude = ["tests*", "docs*", "examples*"]
