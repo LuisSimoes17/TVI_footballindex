@@ -12,6 +12,10 @@ from .f24_parser import (
     get_qualifiers,
     filter_events_by_type,
     get_game_summary,
+    calculate_player_playtime,
+    get_interceptions,
+    get_tackles,
+    get_aerials,
     TYPES_DICT,
     QUALIFIERS_DICT
 )
@@ -23,6 +27,10 @@ __all__ = [
     'get_qualifiers',
     'filter_events_by_type',
     'get_game_summary',
+    'calculate_player_playtime',
     'TYPES_DICT',
     'QUALIFIERS_DICT'
+    'get_interceptions',
+    'get_tackles',
+    'get_aerials'
 ]

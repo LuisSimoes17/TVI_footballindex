@@ -15,6 +15,10 @@ from .parsing.f24_parser import (
     get_qualifiers,
     filter_events_by_type,
     get_game_summary,
+    calculate_player_playtime,
+    get_interceptions,
+    get_tackles,
+    get_aerials,
     TYPES_DICT,
     QUALIFIERS_DICT
 )
@@ -28,6 +32,10 @@ from .parsing.f24_parser import (
 #     # ... other TVI functions
 # )
 
+from .utils.helpers import (
+    assign_zones
+)
+
 from .version import __version__
 
 # Define what gets imported with "from tvi_footballindex import *"
@@ -39,6 +47,10 @@ __all__ = [
     'get_qualifiers',
     'filter_events_by_type',
     'get_game_summary',
+    'calculate_player_playtime',
+    'get_interceptions',
+    'get_tackles',
+    'get_aerials',
     'TYPES_DICT',
     'QUALIFIERS_DICT',
     # TVI functions (add when ready)
@@ -46,6 +58,8 @@ __all__ = [
     # 'calculate_player_tvi',
     # 'calculate_team_tvi',
     # 'get_tvi_components',
+    # Utility functions
+    'assign_zones',
     # Version
     '__version__'
 ]
