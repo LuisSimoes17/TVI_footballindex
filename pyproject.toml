@@ -66,7 +66,7 @@ Repository = "https://github.com/LuisSimoes17/TVI_footballindex.git"
 Issues = "https://github.com/LuisSimoes17/TVI_footballindex/issues"
 
 [tool.setuptools.dynamic]
-version = {attr = "tvi_footballindex.version.__version__"}
+version = {attr = "tvi_footballindex.__version__"}
 
 [tool.setuptools.packages.find]
 exclude = ["tests*", "docs*", "examples*"]

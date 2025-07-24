@@ -36,7 +36,7 @@ from .utils.helpers import (
     assign_zones
 )
 
-from .version import __version__
+__version__ = "0.1.0"
 
 # Define what gets imported with "from tvi_footballindex import *"
 __all__ = [
