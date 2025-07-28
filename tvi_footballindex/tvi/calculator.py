@@ -1,86 +1,37 @@
 import pandas as pd
-from tvi_footballindex.parsing import f24_parser
 from tvi_footballindex.utils import helpers
 
 def calculate_tvi(
-    match_events, 
-    player_playtime, 
-    C=90/44, 
-    zones=9, 
+    all_metric_events,
+    player_playtime,
+    C=90/44,
+    grid_shape=(3, 3),
     zone_map=[2, 1, 2, 4, 3, 4, 6, 5, 6]
 ):
     """
-    Calculate the Total Value Index (TVI) for players based on match events and playtime.
+    Calculate the Total Value Index (TVI) for players based on pre-calculated metric events and playtime.
 
     Args:
-        match_events (pd.DataFrame): DataFrame containing all event data for a match.
+        all_metric_events (pd.DataFrame): DataFrame containing player actions with x and y coordinates.
+                                          Expected columns: ['game_id', 'team_id', 'player_id', 'event_name', 'x', 'y'].
         player_playtime (pd.DataFrame): DataFrame with columns ['game_id', 'team_id', 'player_id', 'play_time'].
         C (float, optional): Scaling constant for TVI calculation. Defaults to 90/44.
-        zones (int, optional): Number of pitch zones. Defaults to 9.
-        zone_map (list, optional): Mapping of event zones to pitch zones. Defaults to [2, 1, 2, 4, 3, 4, 6, 5, 6].
+        grid_shape (tuple, optional): The shape of the grid as (rows, columns). Defaults to (3, 3).
+        zone_map (list, optional): A list that maps the grid index to a specific zone number. The length of the list
+                                   must be equal to rows * columns. Defaults to [2, 1, 2, 4, 3, 4, 6, 5, 6].
 
     Returns:
         pd.DataFrame: DataFrame with TVI and action diversity for each player.
     """
-
-    # Defensive Actions
-    interceptions = f24_parser.get_interceptions(match_events)
-    tackles = f24_parser.get_tackles(match_events)
-    aerials = f24_parser.get_aerials(match_events)
-    defensive_actions = pd.concat([interceptions, tackles, aerials])
-    defensive_actions['zone'] = defensive_actions.apply(
-        lambda row: helpers.assign_zones(row['x'], row['y']), axis=1
+    # Assign zones to each event
+    all_metric_events['zone'] = all_metric_events.apply(
+        lambda row: helpers.assign_zones(row['x'], row['y'], grid_shape=grid_shape, zone_map=zone_map), axis=1
     )
-    defensive_actions = defensive_actions.groupby(
+
+    # Group by event type and zone
+    all_metric_events = all_metric_events.groupby(
         ['game_id', 'team_id', 'player_id', 'event_name', 'zone']
     ).size().reset_index(name='count')
-
-    # Possession Actions
-    progressive_passes = f24_parser.get_progressive_passes(match_events)
-    progressive_passes['zone'] = progressive_passes.apply(
-        lambda row: helpers.assign_zones(row['x'], row['y']), axis=1
-    )
-    progressive_passes = progressive_passes.groupby(
-        ['game_id', 'team_id', 'player_id', 'event_name', 'zone']
-    ).size().reset_index(name='count')
-
-    dribbles = f24_parser.get_dribbles(match_events)
-    dribbles['zone'] = dribbles.apply(
-        lambda row: helpers.assign_zones(row['x'], row['y']), axis=1
-    )
-    dribbles = dribbles.groupby(
-        ['game_id', 'team_id', 'player_id', 'event_name', 'zone']
-    ).size().reset_index(name='count')
-
-    # Offensive Actions
-    key_passes = f24_parser.get_key_passes(match_events)
-    key_passes['zone'] = key_passes.apply(
-        lambda row: helpers.assign_zones(row['x'], row['y']), axis=1
-    )
-    key_passes = key_passes.groupby(
-        ['game_id', 'team_id', 'player_id', 'event_name', 'zone']
-    ).size().reset_index(name='count')
-
-    deep_completions = f24_parser.get_deep_completions(match_events)
-    deep_completions['zone'] = deep_completions.apply(
-        lambda row: helpers.assign_zones(row['x'], row['y']), axis=1
-    )
-    deep_completions = deep_completions.groupby(
-        ['game_id', 'team_id', 'player_id', 'event_name', 'zone']
-    ).size().reset_index(name='count')
-
-    shots_on_target = f24_parser.get_shots_on_target(match_events)
-    shots_on_target['zone'] = shots_on_target.apply(
-        lambda row: helpers.assign_zones(row['x'], row['y']), axis=1
-    )
-    shots_on_target = shots_on_target.groupby(
-        ['game_id', 'team_id', 'player_id', 'event_name', 'zone']
-    ).size().reset_index(name='count')
-
-    # Combine all actions into a single DataFrame
-    all_metric_events = pd.concat([
-        defensive_actions, progressive_passes, dribbles, key_passes, deep_completions, shots_on_target
-    ])
 
     # Pivot the data to have one row per player per match, with action counts as columns
     all_metric_events['event_zone'] = all_metric_events['event_name'] + '_' + all_metric_events['zone'].astype(str)
@@ -103,6 +54,7 @@ def calculate_tvi(
 
     return tvi
 
+
 def aggregate_tvi_by_player(tvi_df):
     """
     Aggregates TVI (Total Value Index) metrics by player from a DataFrame containing per-match or per-event football statistics.
@@ -123,11 +75,11 @@ def aggregate_tvi_by_player(tvi_df):
     """
     tvi_final = tvi_df.copy()
     columns_to_order = []
-    for zone in range(1, 7):
+    for zone in range(1, 13):
         def_cols = [f'Aerial_{zone}', f'Interception_{zone}', f'Tackle_{zone}']
         prog_cols = [f'Take On_{zone}', f'progressive_pass_{zone}']
         off_cols = [f'deep_completition_{zone}', f'key_pass_{zone}', f'shots_on_target_{zone}']
-        
+
         for col in def_cols + prog_cols + off_cols:
             if col not in tvi_final.columns:
                 tvi_final[col] = 0

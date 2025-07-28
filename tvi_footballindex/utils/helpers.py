@@ -2,22 +2,40 @@ from math import sqrt
 import numpy as np
 
 
-def assign_zones(x, y, x_min_max=(0, 100), y_min_max=(0, 100), zones=9, zone_map=[2, 1, 2, 4, 3, 4, 6, 5, 6]):
+def assign_zones(x, y, x_min_max=(0, 100), y_min_max=(0, 100), grid_shape=(3, 3), zone_map=[2, 1, 2, 4, 3, 4, 6, 5, 6]):
     """
-    Assigns a zone based on x, y coordinates.
-    """
-    x_y_divisor = sqrt(zones)
-    if x_y_divisor != int(x_y_divisor):
-        raise ValueError("The number of zones should be a perfect square.")
-    if len(zone_map) != zones:
-        raise ValueError(
-            "The number of zones should match the length of the zone_map list.")
+    Assigns a tactical zone to a given (x, y) coordinate on the football pitch.
 
-    x_step = (x_min_max[1] - x_min_max[0]) / x_y_divisor
-    y_step = (y_min_max[1] - y_min_max[0]) / x_y_divisor
-    row = int(min((x - x_min_max[0]) / x_step, x_y_divisor - 1))
-    col = int(min((y - y_min_max[0]) / y_step, x_y_divisor - 1))
-    index = row * 3 + col
+    The pitch is divided into a grid, and this function determines which zone the coordinate falls into.
+    The grid shape can be customized (e.g., 3x3, 4x3).
+
+    Args:
+        x (float): The x-coordinate of the event, typically ranging from 0 to 100.
+        y (float): The y-coordinate of the event, typically ranging from 0 to 100.
+        x_min_max (tuple, optional): The minimum and maximum values for the x-coordinate. Defaults to (0, 100).
+        y_min_max (tuple, optional): The minimum and maximum values for the y-coordinate. Defaults to (0, 100).
+        grid_shape (tuple, optional): The shape of the grid as (rows, columns). Defaults to (3, 3).
+        zone_map (list, optional): A list that maps the grid index to a specific zone number. The length of the list
+                                   must be equal to rows * columns.
+
+    Returns:
+        int: The zone number corresponding to the given (x, y) coordinate.
+
+    Raises:
+        ValueError: If the length of the zone_map does not match the grid size (rows * columns).
+    """
+    rows, cols = grid_shape
+    if len(zone_map) != rows * cols:
+        raise ValueError(
+            "The number of zones (rows * cols) should match the length of the zone_map list.")
+
+    x_step = (x_min_max[1] - x_min_max[0]) / cols
+    y_step = (y_min_max[1] - y_min_max[0]) / rows
+    
+    col_index = int(min((x - x_min_max[0]) / x_step, cols - 1))
+    row_index = int(min((y - y_min_max[0]) / y_step, rows - 1))
+    
+    index = row_index * cols + col_index
     return zone_map[index]
 
 
@@ -25,7 +43,28 @@ def pass_length(start_x, start_y, end_x, end_y,
                 pitch_length_coord=100, pitch_width_coord=100,
                 pitch_length_meters=105, pitch_width_meters=68):
     """
-    Calculates pass progression and final proximity to the opponent's goal.
+    Calculates the progression of a pass towards the opponent's goal and the final proximity to the goal.
+
+    This function converts coordinate-based pass locations to meters, then calculates the change in distance
+    to the goal line. It also determines whether the pass started and ended in the defensive or attacking half.
+
+    Args:
+        start_x (float): The starting x-coordinate of the pass.
+        start_y (float): The starting y-coordinate of the pass.
+        end_x (float): The ending x-coordinate of the pass.
+        end_y (float): The ending y-coordinate of the pass.
+        pitch_length_coord (int, optional): The length of the pitch in the coordinate system. Defaults to 100.
+        pitch_width_coord (int, optional): The width of the pitch in the coordinate system. Defaults to 100.
+        pitch_length_meters (int, optional): The actual length of the pitch in meters. Defaults to 105.
+        pitch_width_meters (int, optional): The actual width of the pitch in meters. Defaults to 68.
+
+    Returns:
+        tuple: A tuple containing:
+            - progression (float): The distance (in meters) the pass moved closer to the opponent's goal.
+                                   A positive value indicates progression, negative indicates regression.
+            - end_dist (float): The final distance (in meters) from the opponent's goal line.
+            - start_half (str): The half of the pitch where the pass started ('defensive half' or 'attacking half').
+            - end_half (str): The half of the pitch where the pass ended ('defensive half' or 'attacking half').
     """
     scale_x = pitch_length_meters / pitch_length_coord
     scale_y = pitch_width_meters / pitch_width_coord
@@ -46,9 +85,22 @@ def pass_length(start_x, start_y, end_x, end_y,
 
 def weighted_avg(df, weight_column):
     """
-    Computes the weighted average of all numeric columns in a DataFrame for a groupby operation.
+    Computes the weighted average of all numeric columns in a DataFrame, intended for use with pandas groupby().apply().
+
+    This function is useful for aggregating player statistics where each match or event should be weighted by a
+    specific factor, such as minutes played.
+
+    Args:
+        df (pd.DataFrame): The DataFrame or sub-DataFrame (from a groupby) on which to perform the weighted average.
+        weight_column (str): The name of the column that contains the weights (e.g., 'play_time').
+
+    Returns:
+        pd.Series: A Series containing the weighted average for each numeric column, or None if the total weight is zero.
     """
     weights = df[weight_column]
-    weighted_sum = df.drop(columns=[weight_column]).mul(weights, axis=0).sum()
+    numeric_cols = df.select_dtypes(include=np.number).columns.drop(weight_column)
+    weighted_sum = df[numeric_cols].mul(weights, axis=0).sum()
     total_weight = weights.sum()
-    return weighted_sum / total_weight if total_weight != 0 else None
+    if total_weight == 0:
+        return None
+    return weighted_sum / total_weight
