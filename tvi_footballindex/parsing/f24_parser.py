@@ -522,3 +522,221 @@ def get_aerials(match_events, successful_only=True, include_coordinates=True):
         columns.extend(['x', 'y'])
     
     return aerials[columns].reset_index(drop=True)
+
+def get_dribbles(match_events, successful_only=True, include_coordinates=True):
+    """
+    Get dribble (take on) actions for all players.
+
+    Parameters
+    ----------
+    match_events : pandas.DataFrame
+        DataFrame containing match events.
+    successful_only : bool, optional
+        Whether to include only successful dribbles (default: True).
+    include_coordinates : bool, optional
+        Whether to include x, y coordinates (default: True).
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with dribble actions, including columns:
+            - 'game_id'
+            - 'team_id'
+            - 'player_id'
+            - 'event_name' (set to 'dribble')
+            - 'x', 'y' (if include_coordinates is True)
+        The DataFrame is indexed from 0.
+    """
+    dribble_id = 3
+    dribbles = match_events[match_events['type_id'] == dribble_id]
+    if successful_only:
+        dribbles = dribbles[dribbles['outcome'] == 1]
+    dribbles = dribbles.copy()
+    dribbles['event_name'] = 'dribble'
+    columns = ['game_id', 'team_id', 'player_id', 'event_name']
+    if include_coordinates:
+        columns.extend(['x', 'y'])
+    return dribbles[columns].reset_index(drop=True)
+
+def get_shots_on_target(match_events, include_coordinates=True):
+    """
+    Extracts shots on target from a DataFrame of match events.
+
+    Shots on target are defined as shots that are either saved (not blocked) or result in a goal.
+
+    Parameters
+    ----------
+    match_events : pd.DataFrame
+        DataFrame containing match event data.
+    include_coordinates : bool, optional
+        If True, includes the shot coordinates ('x', 'y') in the output. Default is True.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing shots on target with columns:
+            - 'game_id'
+            - 'team_id'
+            - 'player_id'
+            - 'event_name' (set to 'shots_on_target')
+            - 'x', 'y' (if include_coordinates is True)
+        The DataFrame is indexed from 0.
+    """
+    shots_saved_id = 15
+    goals_id = 16
+    shots_saved = match_events[match_events['type_id'] == shots_saved_id]
+    goals = match_events[match_events['type_id'] == goals_id]
+    shots_saved = explode_event(shots_saved, shots_saved_id, 0)
+    shots_saved = shots_saved[shots_saved['Blocked'] != 'yes']
+    shots_on_target = pd.concat([
+        shots_saved[['game_id', 'team_id', 'player_id', 'x', 'y']],
+        goals[['game_id', 'team_id', 'player_id', 'x', 'y']]
+    ])
+    shots_on_target['event_name'] = 'shots_on_target'
+    if not include_coordinates:
+        shots_on_target = shots_on_target.drop(columns=['x', 'y'])
+    return shots_on_target.reset_index(drop=True)
+
+def get_key_passes(match_events, successful_only=True, include_coordinates=True):
+    """
+    Extracts key passes from a DataFrame of match events.
+
+    A key pass is defined as a pass that directly leads to a shot attempt.
+
+    Parameters
+    ----------
+    match_events : pd.DataFrame
+        DataFrame containing match event data.
+    successful_only : bool, optional
+        If True, only considers successful passes. Default is True.
+    include_coordinates : bool, optional
+        If True, includes the starting coordinates ('x', 'y') of the pass in the output. Default is True.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing key passes with columns:
+            - 'game_id'
+            - 'team_id'
+            - 'player_id'
+            - 'event_name' (set to 'key_pass')
+            - 'x', 'y' (if include_coordinates is True)
+        The DataFrame is indexed from 0.
+    """
+    pass_id = 1
+    passes_df = match_events[(match_events['type_id'] == pass_id)]
+    if successful_only:
+        passes_df = passes_df[passes_df['outcome'] == 1]
+    key_passes = passes_df[~passes_df['keypass'].isna()]
+    key_passes['event_name'] = 'key_pass'
+    columns = ['game_id', 'team_id', 'player_id', 'event_name']
+    if include_coordinates:
+        columns.extend(['x', 'y'])
+    return key_passes[columns].reset_index(drop=True)
+
+def get_deep_completions(
+    match_events,
+    successful_only=True,
+    length_deep_completion=20,
+    include_coordinates=True
+):
+    """
+    Extracts deep completions from a DataFrame of match events.
+
+    A deep completion is defined as a completed pass whose ending point is within a certain
+    distance (length_deep_completion) from the opponent's goal (i.e., 'end_dist' < threshold).
+
+    Parameters
+    ----------
+    match_events : pd.DataFrame
+        DataFrame containing match event data.
+    successful_only : bool, optional
+        If True, only considers successful passes. Default is True.
+    length_deep_completion : float, optional
+        Maximum distance from goal for a pass to be considered a deep completion. Default is 20.
+    include_coordinates : bool, optional
+        If True, includes the starting coordinates ('x', 'y') of the pass in the output. Default is True.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing deep completions with columns:
+            - 'game_id'
+            - 'team_id'
+            - 'player_id'
+            - 'event_name' (set to 'deep_completion')
+            - 'x', 'y' (if include_coordinates is True)
+        The DataFrame is indexed from 0.
+    """
+    pass_id = 1
+    passes_df = match_events[(match_events['type_id'] == pass_id)]
+    if successful_only:
+        passes_df = passes_df[passes_df['outcome'] == 1]
+    passes_exploded = explode_event(passes_df, pass_id, 0.15)
+    passes_exploded['pass_end_x'] = passes_exploded['Pass End X'].astype('float')
+    passes_exploded['pass_end_y'] = passes_exploded['Pass End Y'].astype('float')
+    passes_exploded[['pass_progression', 'end_dist', 'start_half', 'end_half']] = passes_exploded.apply(
+        lambda row: pd.Series(pass_length(row['x'], row['y'], row['pass_end_x'], row['pass_end_y'])), axis=1)
+    deep_completion = passes_exploded[passes_exploded['end_dist'] < length_deep_completion]
+    deep_completion['event_name'] = 'deep_completion'
+    columns = ['game_id', 'team_id', 'player_id', 'event_name']
+    if include_coordinates:
+        columns.extend(['x', 'y'])
+    return deep_completion[columns].reset_index(drop=True)
+
+def get_progressive_passes(match_events, successful_only=True, length_threshold=[30, 15, 10], include_coordinates=True):
+    def get_progressive_passes(
+        match_events,
+        successful_only=True,
+        length_threshold=[30, 15, 10],
+        include_coordinates=True
+    ):
+        """
+        Extracts progressive passes from a DataFrame of match events.
+
+        A progressive pass is defined as a pass that moves the ball significantly closer to the opponent's goal,
+        based on the starting and ending halves of the pitch and configurable distance thresholds.
+
+        Args:
+            match_events (pd.DataFrame): DataFrame containing event data for a match, including pass events.
+            successful_only (bool, optional): If True, only considers successful passes. Defaults to True.
+            length_threshold (list of float, optional): Minimum progression distances (in meters or pitch units) for a pass to be considered progressive, depending on the start and end halves:
+                - [0]: Defensive half to defensive half
+                - [1]: Defensive half to attacking half
+                - [2]: Attacking half to attacking half
+                Defaults to [30, 15, 10].
+            include_coordinates (bool, optional): If True, includes the starting coordinates ('x', 'y') of the pass in the output. Defaults to True.
+
+        Returns:
+            pd.DataFrame: DataFrame containing progressive passes with columns:
+                - 'game_id'
+                - 'team_id'
+                - 'player_id'
+                - 'event_name' (set to 'progressive_pass')
+                - 'x', 'y' (if include_coordinates is True)
+            The DataFrame is indexed from 0.
+
+        Notes:
+            - Relies on helper functions `explode_event` and `pass_length` to process and calculate pass progression.
+            - Assumes the input DataFrame contains columns: 'type_id', 'outcome', 'Pass End X', 'Pass End Y', 'x', 'y', 'game_id', 'team_id', 'player_id'.
+            - The function filters passes based on their progression distance and the halves of the pitch they start and end in.
+        """
+        # function implementation...
+    pass_id = 1
+    passes_df = match_events[(match_events['type_id'] == pass_id)]
+    if successful_only:
+        passes_df = passes_df[passes_df['outcome'] == 1]
+    passes_exploded = explode_event(passes_df, pass_id, 0.15)
+    passes_exploded['pass_end_x'] = passes_exploded['Pass End X'].astype('float')
+    passes_exploded['pass_end_y'] = passes_exploded['Pass End Y'].astype('float')
+    passes_exploded[['pass_progression', 'end_dist', 'start_half', 'end_half']] = passes_exploded.apply(
+        lambda row: pd.Series(pass_length(row['x'], row['y'], row['pass_end_x'], row['pass_end_y'])), axis=1)
+    progressive_passes = passes_exploded[
+        ((passes_exploded['start_half'] == 'defensive half') & (passes_exploded['end_half'] == 'defensive half') & (passes_exploded['pass_progression'] > length_threshold[0])) |
+        ((passes_exploded['start_half'] == 'defensive half') & (passes_exploded['end_half'] == 'attacking half') & (passes_exploded['pass_progression'] > length_threshold[1])) |
+        ((passes_exploded['start_half'] == 'attacking half') & (passes_exploded['end_half'] == 'attacking half') & (passes_exploded['pass_progression'] > length_threshold[2]))]
+    progressive_passes['event_name'] = 'progressive_pass'
+    columns = ['game_id', 'team_id', 'player_id', 'event_name']
+    if include_coordinates:
+        columns.extend(['x', 'y'])
+    return progressive_passes[columns].reset_index(drop=True)
