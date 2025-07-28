@@ -14,6 +14,8 @@ import pandas as pd
 import os
 from tqdm import tqdm
 
+from tvi_footballindex.utils.helpers import pass_length
+
 # Configure pandas display options
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', 20)

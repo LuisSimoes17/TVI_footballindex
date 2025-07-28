@@ -3,8 +3,8 @@ from tvi_footballindex.parsing import f24_parser
 from tvi_footballindex.tvi import calculator
 
 # Define paths
-F24_FOLDER_PATH = "/content/"
-PLAYER_NAME_PATH = "/content/opta_planteis_portugal.xlsx"
+F24_FOLDER_PATH = "examples/data/F24 - Portugal"
+PLAYER_NAME_PATH = "examples/data/opta_planteis_portugal.xlsx"
 
 # 1. Parse F24 data
 print("Parsing F24 data...")
@@ -25,6 +25,7 @@ tvi_aggregated = calculator.aggregate_tvi_by_player(tvi_per_game)
 # 5. Add player names and filter
 print("Adding player names and filtering...")
 player_names = pd.read_excel(PLAYER_NAME_PATH)
+tvi_aggregated['player_id'] = tvi_aggregated['player_id'].astype('int')
 tvi_final = pd.merge(player_names, tvi_aggregated, on='player_id', how='right')
 
 # Filter out goalkeepers and players with low playtime
