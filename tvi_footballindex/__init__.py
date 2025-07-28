@@ -23,14 +23,10 @@ from .parsing.f24_parser import (
     QUALIFIERS_DICT
 )
 
-# Import from TVI module (when ready)
-# from .tvi.calculator import (
-#     calculate_tvi,
-#     calculate_player_tvi,
-#     calculate_team_tvi,
-#     get_tvi_components,
-#     # ... other TVI functions
-# )
+from .tvi.calculator import (
+    calculate_tvi,
+    aggregate_tvi_by_player
+)
 
 from .utils.helpers import (
     assign_zones
@@ -53,11 +49,9 @@ __all__ = [
     'get_aerials',
     'TYPES_DICT',
     'QUALIFIERS_DICT',
-    # TVI functions (add when ready)
-    # 'calculate_tvi',
-    # 'calculate_player_tvi',
-    # 'calculate_team_tvi',
-    # 'get_tvi_components',
+    # TVI functions
+    'calculate_tvi',
+    'aggregate_tvi_by_player',
     # Utility functions
     'assign_zones',
     # Version

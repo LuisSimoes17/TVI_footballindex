@@ -16,6 +16,11 @@ from .f24_parser import (
     get_interceptions,
     get_tackles,
     get_aerials,
+    get_dribbles,
+    get_shots_on_target,
+    get_key_passes,
+    get_deep_completions,
+    get_progressive_passes,
     TYPES_DICT,
     QUALIFIERS_DICT
 )
@@ -28,9 +33,14 @@ __all__ = [
     'filter_events_by_type',
     'get_game_summary',
     'calculate_player_playtime',
-    'TYPES_DICT',
-    'QUALIFIERS_DICT'
     'get_interceptions',
     'get_tackles',
-    'get_aerials'
+    'get_aerials',
+    'get_dribbles',
+    'get_shots_on_target',
+    'get_key_passes',
+    'get_deep_completions',
+    'get_progressive_passes',
+    'TYPES_DICT',
+    'QUALIFIERS_DICT'
 ]
