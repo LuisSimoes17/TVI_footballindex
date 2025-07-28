@@ -55,7 +55,13 @@ def calculate_tvi(
     return tvi
 
 
-def aggregate_tvi_by_player(tvi_df):
+def aggregate_tvi_by_player(
+    tvi_df,
+    zone_map=[2, 1, 2, 4, 3, 4, 6, 5, 6],
+    def_cols_template=None,
+    prog_cols_template=None,
+    off_cols_template=None
+):
     """
     Aggregates TVI (Total Value Index) metrics by player from a DataFrame containing per-match or per-event football statistics.
     This function processes the input DataFrame by:
@@ -67,18 +73,30 @@ def aggregate_tvi_by_player(tvi_df):
     - Reordering and selecting relevant columns for the final output.
     Args:
         tvi_df (pd.DataFrame): Input DataFrame with columns for player actions per zone, 'player_id', 'team_id', 'game_id', 'play_time', 'action_diversity', and 'TVI'.
+        zone_map (list, optional): A list that maps the grid index to a specific zone number. The length of the list
+                                   must be equal to rows * columns. Defaults to [2, 1, 2, 4, 3, 4, 6, 5, 6].
+        def_cols_template (list, optional): List of defensive action column name templates, e.g. ['Aerial_{}', 'Interception_{}', 'Tackle_{}'].
+        prog_cols_template (list, optional): List of progressive action column name templates, e.g. ['Take On_{}', 'progressive_pass_{}'].
+        off_cols_template (list, optional): List of offensive action column name templates, e.g. ['deep_completition_{}', 'key_pass_{}', 'shots_on_target_{}'].
     Returns:
         pd.DataFrame: Aggregated DataFrame with one row per player, including summed and weighted metrics, sorted by 'TVI' in descending order.
     Notes:
         - Requires the 'helpers.weighted_avg' function to be defined elsewhere.
         - Assumes the presence of pandas as pd.
     """
+    if def_cols_template is None:
+        def_cols_template = ['Aerial_{}', 'Interception_{}', 'Tackle_{}']
+    if prog_cols_template is None:
+        prog_cols_template = ['Take On_{}', 'progressive_pass_{}']
+    if off_cols_template is None:
+        off_cols_template = ['deep_completition_{}', 'key_pass_{}', 'shots_on_target_{}']
+
     tvi_final = tvi_df.copy()
     columns_to_order = []
-    for zone in range(1, 13):
-        def_cols = [f'Aerial_{zone}', f'Interception_{zone}', f'Tackle_{zone}']
-        prog_cols = [f'Take On_{zone}', f'progressive_pass_{zone}']
-        off_cols = [f'deep_completition_{zone}', f'key_pass_{zone}', f'shots_on_target_{zone}']
+    for zone in range(1, len(set(zone_map)) + 1):
+        def_cols = [col.format(zone) for col in def_cols_template]
+        prog_cols = [col.format(zone) for col in prog_cols_template]
+        off_cols = [col.format(zone) for col in off_cols_template]
 
         for col in def_cols + prog_cols + off_cols:
             if col not in tvi_final.columns:
