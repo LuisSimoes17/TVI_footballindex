@@ -31,14 +31,13 @@ shots_on_target = f24_parser.get_shots_on_target(event_df, from_processed=True)
 all_metric_events = pd.concat([
     interceptions, tackles, aerials, progressive_passes, dribbles, key_passes, deep_completions, shots_on_target
 ])
-all_metric_events['player_id'] = all_metric_events['player_id'].astype(str)
+all_metric_events['player_id'] = all_metric_events['player_id'].astype(int).astype(str)
 
 # Calculate TVI with the custom grid
 tvi_df = calculator.calculate_tvi(
     all_metric_events, 
     play_time
 )
-print(tvi_df.head())
 
 # Aggregate TVI by player
 aggregated_tvi = calculator.aggregate_tvi_by_player(tvi_df)
@@ -51,7 +50,7 @@ player_names = (
 player_names.rename(
     columns={"player": "player_name", "team": "team_name"}, inplace=True
 )
-aggregated_tvi['player_id'] = aggregated_tvi['player_id'].astype('float')
+aggregated_tvi['player_id'] = aggregated_tvi['player_id'].astype(int)
 tvi_final = pd.merge(player_names, aggregated_tvi, on='player_id', how='right')
 
 # Filter out goalkeepers and players with low playtime

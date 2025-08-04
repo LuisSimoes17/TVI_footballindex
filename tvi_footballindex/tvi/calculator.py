@@ -56,28 +56,16 @@ def calculate_tvi(
 
 
 def aggregate_tvi_by_player(
-    tvi_df,
-    zone_map=[2, 1, 2, 4, 3, 4, 6, 5, 6],
-    def_cols_template=None,
-    prog_cols_template=None,
-    off_cols_template=None
+    tvi_df
 ):
     """
     Aggregates TVI (Total Value Index) metrics by player from a DataFrame containing per-match or per-event football statistics.
     This function processes the input DataFrame by:
-    - Summing up defensive, progressive, and offensive actions for each of six pitch zones.
-    - Ensuring all expected action columns exist, filling missing ones with zeros.
-    - Dropping the original action columns after aggregation.
     - Grouping the data by player and computing a weighted average of the metrics using play time as the weight.
     - Merging the total play time per player.
     - Reordering and selecting relevant columns for the final output.
     Args:
         tvi_df (pd.DataFrame): Input DataFrame with columns for player actions per zone, 'player_id', 'team_id', 'game_id', 'play_time', 'action_diversity', and 'TVI'.
-        zone_map (list, optional): A list that maps the grid index to a specific zone number. The length of the list
-                                   must be equal to rows * columns. Defaults to [2, 1, 2, 4, 3, 4, 6, 5, 6].
-        def_cols_template (list, optional): List of defensive action column name templates, e.g. ['Aerial_{}', 'Interception_{}', 'Tackle_{}'].
-        prog_cols_template (list, optional): List of progressive action column name templates, e.g. ['Take On_{}', 'progressive_pass_{}'].
-        off_cols_template (list, optional): List of offensive action column name templates, e.g. ['deep_completition_{}', 'key_pass_{}', 'shots_on_target_{}'].
     Returns:
         pd.DataFrame: Aggregated DataFrame with one row per player, including summed and weighted metrics, sorted by 'TVI' in descending order.
     Notes:
@@ -85,35 +73,7 @@ def aggregate_tvi_by_player(
         - Assumes the presence of pandas as pd.
     """
 
-    '''
-    if def_cols_template is None:
-        def_cols_template = ['Aerial_{}', 'Interception_{}', 'Tackle_{}']
-    if prog_cols_template is None:
-        prog_cols_template = ['Take On_{}', 'progressive_pass_{}']
-    if off_cols_template is None:
-        off_cols_template = ['deep_completition_{}', 'key_pass_{}', 'shots_on_target_{}']
-    '''
-
     tvi_final = tvi_df.copy()
-
-    '''
-    columns_to_order = []
-    for zone in range(1, len(set(zone_map)) + 1):
-        def_cols = [col.format(zone) for col in def_cols_template]
-        prog_cols = [col.format(zone) for col in prog_cols_template]
-        off_cols = [col.format(zone) for col in off_cols_template]
-
-        for col in def_cols + prog_cols + off_cols:
-            if col not in tvi_final.columns:
-                tvi_final[col] = 0
-
-        tvi_final[f'defensive_zone_{zone}'] = tvi_final[def_cols].sum(axis=1)
-        tvi_final[f'progressive_zone_{zone}'] = tvi_final[prog_cols].sum(axis=1)
-        tvi_final[f'offensive_zone_{zone}'] = tvi_final[off_cols].sum(axis=1)
-
-        tvi_final.drop(columns=def_cols + prog_cols + off_cols, inplace=True)
-        columns_to_order.extend([f'defensive_zone_{zone}', f'progressive_zone_{zone}', f'offensive_zone_{zone}'])
-    '''
 
     tvi_final = tvi_final.drop(columns=['team_id', 'game_id'])\
         .groupby(['player_id','position']).apply(helpers.weighted_avg, weight_column='play_time').reset_index()
