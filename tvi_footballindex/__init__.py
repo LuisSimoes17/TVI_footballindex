@@ -32,7 +32,7 @@ from .utils.helpers import (
     assign_zones
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # Define what gets imported with "from tvi_footballindex import *"
 __all__ = [

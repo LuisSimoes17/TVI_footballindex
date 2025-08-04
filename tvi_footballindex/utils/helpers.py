@@ -1,42 +1,54 @@
-from math import sqrt
 import numpy as np
 
 
-def assign_zones(x, y, x_min_max=(0, 100), y_min_max=(0, 100), grid_shape=(3, 3), zone_map=[2, 1, 2, 4, 3, 4, 6, 5, 6]):
+def assign_zones(x, y, x_min_max=(0, 100), y_min_max=(0, 100), 
+                zone_map=[[2, 4, 6],
+                          [1, 3, 5], 
+                          [2, 4, 6]]):
     """
     Assigns a tactical zone to a given (x, y) coordinate on the football pitch.
 
     The pitch is divided into a grid, and this function determines which zone the coordinate falls into.
-    The grid shape can be customized (e.g., 3x3, 4x3).
+    
+    Zone layout (from image) - matrix represents pitch from top to bottom:
+    [[2, 4, 6],   # Top third of pitch
+     [1, 3, 5],   # Middle third of pitch  
+     [2, 4, 6]]   # Bottom third of pitch
 
     Args:
-        x (float): The x-coordinate of the event, typically ranging from 0 to 100.
-        y (float): The y-coordinate of the event, typically ranging from 0 to 100.
+        x (float): The x-coordinate of the event, typically ranging from 0 to 100 (goal to goal).
+        y (float): The y-coordinate of the event, typically ranging from 0 to 100 (touchline to touchline).
         x_min_max (tuple, optional): The minimum and maximum values for the x-coordinate. Defaults to (0, 100).
         y_min_max (tuple, optional): The minimum and maximum values for the y-coordinate. Defaults to (0, 100).
-        grid_shape (tuple, optional): The shape of the grid as (rows, columns). Defaults to (3, 3).
-        zone_map (list, optional): A list that maps the grid index to a specific zone number. The length of the list
-                                   must be equal to rows * columns.
+        zone_map (list of lists, optional): A 2D matrix representing zones. Each row represents a horizontal
+                                          strip of the pitch from top to bottom. Each column represents
+                                          vertical strips from left to right.
 
     Returns:
         int: The zone number corresponding to the given (x, y) coordinate.
 
     Raises:
-        ValueError: If the length of the zone_map does not match the grid size (rows * columns).
+        ValueError: If the zone_map is not a valid 2D matrix (inconsistent row lengths).
     """
-    rows, cols = grid_shape
-    if len(zone_map) != rows * cols:
-        raise ValueError(
-            "The number of zones (rows * cols) should match the length of the zone_map list.")
-
+    # Validate zone_map structure
+    if not zone_map or not all(len(row) == len(zone_map[0]) for row in zone_map):
+        raise ValueError("zone_map must be a valid 2D matrix with consistent row lengths.")
+    
+    rows = len(zone_map)
+    cols = len(zone_map[0])
+    
     x_step = (x_min_max[1] - x_min_max[0]) / cols
     y_step = (y_min_max[1] - y_min_max[0]) / rows
     
+    # Map x to columns (left to right across pitch length)
     col_index = int(min((x - x_min_max[0]) / x_step, cols - 1))
-    row_index = int(min((y - y_min_max[0]) / y_step, rows - 1))
     
-    index = row_index * cols + col_index
-    return zone_map[index]
+    # Map y to rows (higher y values = higher on pitch = lower row indices)
+    # Since zone_map[0] represents top of pitch, invert y mapping
+    row_index = int(min((y - y_min_max[0]) / y_step, rows - 1))
+    row_index = rows - 1 - row_index  # Invert: high y -> low row index
+    
+    return zone_map[row_index][col_index]
 
 
 def pass_length(start_x, start_y, end_x, end_y,

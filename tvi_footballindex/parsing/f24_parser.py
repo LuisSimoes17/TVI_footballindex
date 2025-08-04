@@ -453,12 +453,6 @@ def calculate_player_playtime(match_events, min_playtime=30, clip_to_90=True, fr
         .rename(columns={'PlayerPosition': 'position'})
     
     # Combine starting eleven and substitutions
-    print(starting_eleven.dtypes)
-    print(starting_eleven[(starting_eleven['player_id'] == '408941') & (starting_eleven['game_id'] == 1836710)])
-    print(sub_ons.dtypes)
-    print(sub_ons[(sub_ons['player_id'] == '408941') & (sub_ons['game_id'] == 1836710)])
-    print(sub_offs.dtypes)
-    print(sub_offs[(sub_offs['player_id'] == '408941') & (sub_offs['game_id'] == 1836710)])
     play_time = pd.concat([starting_eleven, sub_ons], axis=0)
     play_time = pd.merge(play_time, sub_offs, on=['game_id', 'team_id', 'player_id'], how='left')
     

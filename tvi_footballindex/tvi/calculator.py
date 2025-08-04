@@ -5,8 +5,9 @@ def calculate_tvi(
     all_metric_events,
     player_playtime,
     C=90/44,
-    grid_shape=(3, 3),
-    zone_map=[2, 1, 2, 4, 3, 4, 6, 5, 6]
+    zone_map=[[2, 4, 6],
+            [1, 3, 5], 
+            [2, 4, 6]]
 ):
     """
     Calculate the Total Value Index (TVI) for players based on pre-calculated metric events and playtime.
@@ -25,7 +26,7 @@ def calculate_tvi(
     """
     # Assign zones to each event
     all_metric_events['zone'] = all_metric_events.apply(
-        lambda row: helpers.assign_zones(row['x'], row['y'], grid_shape=grid_shape, zone_map=zone_map), axis=1
+        lambda row: helpers.assign_zones(row['x'], row['y'], zone_map=zone_map), axis=1
     )
 
     # Group by event type and zone
@@ -71,16 +72,35 @@ def aggregate_tvi_by_player(
     Notes:
         - Requires the 'helpers.weighted_avg' function to be defined elsewhere.
         - Assumes the presence of pandas as pd.
+        - The 'position' field will show the position where the player spent most time.
+
     """
 
     tvi_final = tvi_df.copy()
 
-    tvi_final = tvi_final.drop(columns=['team_id', 'game_id'])\
-        .groupby(['player_id','position']).apply(helpers.weighted_avg, weight_column='play_time').reset_index()
+    tvi_final = tvi_final.drop(columns=['team_id', 'game_id', 'position'])\
+        .groupby(['player_id']).apply(helpers.weighted_avg, weight_column='play_time').reset_index()
+    
+    # Find the position where each player spent the most time
+    position_time = tvi_df.groupby(['player_id', 'position'])['play_time'].sum().reset_index()
+    
+    # Get the position with maximum play time for each player
+    most_played_position = position_time.loc[
+        position_time.groupby('player_id')['play_time'].idxmax()
+    ][['player_id', 'position']].rename(columns={'position': 'main_position'})
 
-    total_play_time = tvi_df.groupby(['player_id','position'])['play_time'].sum().reset_index()
-    tvi_final = pd.merge(tvi_final, total_play_time, on=['player_id','position'], how='left')
+    total_play_time = tvi_df.groupby(['player_id'])['play_time'].sum().reset_index()
+    total_play_time = total_play_time.rename(columns={'play_time': 'total_play_time'})
 
-    tvi_final = tvi_final#[['player_id', 'position', 'action_diversity', 'play_time', 'TVI'] + columns_to_order]
+    # Merge everything together
+    tvi_final = pd.merge(tvi_final, most_played_position, on=['player_id'], how='left')
+    tvi_final = pd.merge(tvi_final, total_play_time, on=['player_id'], how='left')
+
+    # Update the play_time column to reflect total play time
+    tvi_final['play_time'] = tvi_final['total_play_time']
+    tvi_final = tvi_final.drop(columns=['total_play_time'])
+
+    # Rename main_position back to position for consistency
+    tvi_final = tvi_final.rename(columns={'main_position': 'position'})
 
     return tvi_final.sort_values('TVI', ascending=False)
