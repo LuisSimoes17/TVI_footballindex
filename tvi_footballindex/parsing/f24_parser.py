@@ -437,10 +437,10 @@ def calculate_player_playtime(match_events, min_playtime=30, clip_to_90=True, fr
         # If already processed, use 'event_name' for substitutions
         sub_ons = match_events[match_events['event_name'] == 'SubstitutionOn']\
           .rename(columns={'minute': 'start_time'}).reset_index(drop=True)
-        sub_ons['player_id'] = sub_ons['player_id'].astype(str)
+        sub_ons['player_id'] = sub_ons['player_id'].astype(int).astype(str)
         sub_offs = match_events[match_events['event_name'] == 'SubstitutionOff'][['game_id', 'team_id', 'player_id', 'minute']]\
           .rename(columns={'minute': 'end_time'}).reset_index(drop=True)
-        sub_offs['player_id'] = sub_offs['player_id'].astype(str)
+        sub_offs['player_id'] = sub_offs['player_id'].astype(int).astype(str)
     else:
         # If not processed, use type_id for substitutions
         sub_ons = match_events[match_events['type_id'] == player_on_id]\
@@ -450,10 +450,15 @@ def calculate_player_playtime(match_events, min_playtime=30, clip_to_90=True, fr
     
     # get player position from substitution events
     sub_ons = explode_event(sub_ons, player_on_id, 0, from_processed=from_processed)[['game_id', 'team_id', 'player_id', 'start_time', 'PlayerPosition']]\
-        .rename(columns={'PlayerPosition': 'position'}, inplace=True)
-
+        .rename(columns={'PlayerPosition': 'position'})
     
     # Combine starting eleven and substitutions
+    print(starting_eleven.dtypes)
+    print(starting_eleven[(starting_eleven['player_id'] == '408941') & (starting_eleven['game_id'] == 1836710)])
+    print(sub_ons.dtypes)
+    print(sub_ons[(sub_ons['player_id'] == '408941') & (sub_ons['game_id'] == 1836710)])
+    print(sub_offs.dtypes)
+    print(sub_offs[(sub_offs['player_id'] == '408941') & (sub_offs['game_id'] == 1836710)])
     play_time = pd.concat([starting_eleven, sub_ons], axis=0)
     play_time = pd.merge(play_time, sub_offs, on=['game_id', 'team_id', 'player_id'], how='left')
     
