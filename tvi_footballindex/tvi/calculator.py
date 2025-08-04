@@ -84,14 +84,19 @@ def aggregate_tvi_by_player(
         - Requires the 'helpers.weighted_avg' function to be defined elsewhere.
         - Assumes the presence of pandas as pd.
     """
+
+    '''
     if def_cols_template is None:
         def_cols_template = ['Aerial_{}', 'Interception_{}', 'Tackle_{}']
     if prog_cols_template is None:
         prog_cols_template = ['Take On_{}', 'progressive_pass_{}']
     if off_cols_template is None:
         off_cols_template = ['deep_completition_{}', 'key_pass_{}', 'shots_on_target_{}']
+    '''
 
     tvi_final = tvi_df.copy()
+
+    '''
     columns_to_order = []
     for zone in range(1, len(set(zone_map)) + 1):
         def_cols = [col.format(zone) for col in def_cols_template]
@@ -108,13 +113,14 @@ def aggregate_tvi_by_player(
 
         tvi_final.drop(columns=def_cols + prog_cols + off_cols, inplace=True)
         columns_to_order.extend([f'defensive_zone_{zone}', f'progressive_zone_{zone}', f'offensive_zone_{zone}'])
+    '''
 
     tvi_final = tvi_final.drop(columns=['team_id', 'game_id'])\
-        .groupby('player_id').apply(helpers.weighted_avg, weight_column='play_time').reset_index()
+        .groupby(['player_id','position']).apply(helpers.weighted_avg, weight_column='play_time').reset_index()
 
-    total_play_time = tvi_df.groupby('player_id')['play_time'].sum().reset_index()
-    tvi_final = pd.merge(tvi_final, total_play_time, on='player_id', how='left')
+    total_play_time = tvi_df.groupby(['player_id','position'])['play_time'].sum().reset_index()
+    tvi_final = pd.merge(tvi_final, total_play_time, on=['player_id','position'], how='left')
 
-    tvi_final = tvi_final[['player_id', 'action_diversity', 'play_time', 'TVI'] + columns_to_order]
+    tvi_final = tvi_final#[['player_id', 'position', 'action_diversity', 'play_time', 'TVI'] + columns_to_order]
 
     return tvi_final.sort_values('TVI', ascending=False)

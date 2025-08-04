@@ -13,6 +13,7 @@ from pandas import json_normalize
 import pandas as pd
 import os
 from tqdm import tqdm
+import json
 
 from tvi_footballindex.utils.helpers import pass_length
 
@@ -25,12 +26,12 @@ TYPES_DICT = {
     1: "Pass", 2: "Offside Pass", 3: "Take On", 4: "Foul", 5: "Out", 
     6: "Corner Awarded", 7: "Tackle", 8: "Interception", 9: "Turnover", 
     10: "Save", 11: "Claim", 12: "Clearance", 13: "Miss", 14: "Post", 
-    15: "Attempt Saved", 16: "Goal", 17: "Card", 18: "Player off", 
-    19: "Player on", 20: "Player retired", 21: "Player returns", 
+    15: "SavedShot", 16: "Goal", 17: "Card", 18: "SubstitutionOff", 
+    19: "SubstitutionOn", 20: "Player retired", 21: "Player returns", 
     22: "Player becomes goalkeeper", 23: "Goalkeeper becomes player", 
     24: "Condition change", 25: "Official change", 27: "Start delay", 
     28: "End delay", 30: "End", 31: "Picked an orange", 32: "Start", 
-    34: "Team set up", 35: "Player changed position", 
+    34: "FormationSet", 35: "Player changed position", 
     36: "Player changed Jersey number", 37: "Collection End", 
     38: "Temp_Goal", 39: "Temp_Attempt", 40: "Formation change", 
     41: "Punch", 42: "Good Skill", 43: "Deleted event", 44: "Aerial", 
@@ -53,11 +54,11 @@ QUALIFIERS_DICT = {
     16: "Small box-centre", 17: "Box-centre", 18: "Out of box-centre", 
     19: "35+ centre", 20: "Right footed", 21: "Other body part", 
     22: "Regular play", 23: "Fast break", 24: "Set piece", 25: "From corner", 
-    26: "Free kick", 28: "Own goal", 29: "Assisted", 30: "Involved", 
+    26: "Free kick", 28: "Own goal", 29: "Assisted", 30: "InvolvedPlayers", 
     31: "Yellow Card", 32: "Second yellow", 33: "Red card", 34: "Referee abuse", 
     35: "Argument", 36: "Fight", 37: "Time wasting", 38: "Excessive celebration", 
     39: "Crowd interaction", 40: "Other reason", 41: "Injury", 42: "Tactical", 
-    44: "Player position", 49: "Attendance figure", 50: "Official position", 
+    44: "PlayerPosition", 49: "Attendance figure", 50: "Official position", 
     51: "Official ID", 53: "Injured player id", 54: "End cause", 
     55: "Related event ID", 56: "Zone", 57: "End type", 59: "Jersey number", 
     60: "Small box-right", 61: "Small box-left", 62: "Box-deep right", 
@@ -78,8 +79,8 @@ QUALIFIERS_DICT = {
     123: "Keeper Throw", 124: "Goal Kick", 127: "Direction of play", 128: "Punch", 
     130: "Team formation", 131: "Team player formation", 132: "Dive", 133: "Deflection", 
     134: "Far Wide Left", 135: "Far Wide Right", 136: "Keeper Touched", 
-    137: "Keeper Saved", 138: "Hit Woodwork", 139: "Own Player", 140: "Pass End X", 
-    141: "Pass End Y", 144: "Deleted event type", 145: "Formation slot", 
+    137: "Keeper Saved", 138: "Hit Woodwork", 139: "Own Player", 140: "PassEndX", 
+    141: "PassEndY", 144: "Deleted event type", 145: "Formation slot", 
     146: "Blocked x co-ordinate", 147: "Blocked y co-ordinate", 153: "Not past goal line", 
     154: "Intentional assist", 155: "Chipped", 156: "Lay-off", 157: "Launch", 
     158: "Persistent infringement", 159: "Foul and abusive language", 
@@ -196,8 +197,43 @@ def parsef24_folder(F24folder, show_progress=True):
 
     return match_events
 
+def parsef24_csv(F24file):
+    """
+    Parse a single already processed CSV file.
 
-def explode_event(nome_df, id_evento, mytresh):
+    Parameters:
+    -----------
+    F24file : str
+        Name of the CSV file to parse
+        
+    Returns:
+    --------
+    pandas.DataFrame
+        DataFrame containing events from the single file
+    """
+
+    print(f"Processing: {F24file}")
+
+    # Read CSV file
+    events_df = pd.read_csv(F24file)
+    
+    # Parse qualifiers if they exist as JSON strings
+    if "qualifiers" in events_df.columns:
+        events_df["qualifiers"] = events_df["qualifiers"].apply(
+            lambda x: json.loads(x) if pd.notna(x) and x != '' else []
+        )
+    
+    # Add row index as ID if not present
+    if "id" not in events_df.columns:
+        events_df["id"] = events_df.index
+
+    # rename type column
+    events_df.rename(columns={"type": "event_name"}, inplace=True)
+    
+    return events_df
+
+
+def explode_event(nome_df, id_evento, mytresh, from_processed=False):
     """
     Explode qualifiers for a specific event type and pivot them into columns.
     
@@ -209,17 +245,25 @@ def explode_event(nome_df, id_evento, mytresh):
         Event type ID to filter for
     mytresh : float
         Threshold for minimum non-NA values to keep columns (0-1)
-        
+    from_processed : bool, optional
+        Whether the DataFrame is already processed - meaning event ids are already replaced by event names (default: False)
     Returns:
     --------
     pandas.DataFrame
         DataFrame with exploded qualifiers as columns
     """
     # Filter the dataframe for the required event type
-    nome_df = nome_df[nome_df["type_id"] == id_evento].copy()
+    if from_processed:
+        event_name = TYPES_DICT.get(id_evento, None)
+        nome_df = nome_df[nome_df["event_name"] == event_name].copy()
+        # qualifier_id is not available in processed data
+        qualifier_id = "type.displayName"
+    else:
+        nome_df = nome_df[nome_df["type_id"] == id_evento].copy()
+        qualifier_id = "qualifier_id"
 
     if nome_df.empty:
-        return pd.DataFrame()  # Return empty if no matching events
+        raise ValueError(f"No events found for type ID {id_evento} in the provided DataFrame.")
 
     # Explode 'qualifiers' column (assuming it's a list of dictionaries)
     nome_df_exploded = nome_df.explode("qualifiers")
@@ -232,11 +276,12 @@ def explode_event(nome_df, id_evento, mytresh):
 
     # Pivot table
     qualifiers_df = qualifiers_df\
-        .pivot_table(index='id', columns='qualifier_id', values='value', aggfunc='first')\
+        .pivot_table(index='id', columns=qualifier_id, values='value', aggfunc='first')\
         .reset_index()
 
     # Rename columns based on qualifiers dictionary
-    qualifiers_df.rename(columns=qualifiers_dict2, inplace=True)
+    if not from_processed:
+        qualifiers_df.rename(columns=qualifiers_dict2, inplace=True)
 
     # Drop columns that have too many NaN values
     min_non_na = len(qualifiers_df) * mytresh
@@ -328,7 +373,7 @@ def get_game_summary(df):
     return summary
 
 
-def calculate_player_playtime(match_events, min_playtime=30, clip_to_90=True):
+def calculate_player_playtime(match_events, min_playtime=30, clip_to_90=True, from_processed=False):
     """
     Calculate playtime for each player in each game.
     
@@ -356,28 +401,57 @@ def calculate_player_playtime(match_events, min_playtime=30, clip_to_90=True):
     player_off_id = 18       # Player off (substitution out)
     
     # Get starting eleven players
-    starting_eleven = explode_event(match_events, starting_eleven_id, 0)[['game_id', 'team_id', 'Involved']]
+    starting_eleven = explode_event(match_events, starting_eleven_id, 0, from_processed=from_processed)[['game_id', 'team_id', 'InvolvedPlayers', 'PlayerPosition']]
     
     if starting_eleven.empty:
         # If no starting eleven data, return empty DataFrame
         return pd.DataFrame(columns=['game_id', 'team_id', 'player_id', 'play_time'])
     
+    def get_player_position(position_key: str):
+        match position_key:
+            case "1":
+                return "Goalkeeper"
+            case "2":
+                return "Defender"
+            case "3":
+                return "Midfielder"
+            case "4":
+                return "Forward"
+            case _:
+                return None
+
     # Get only first 11 players involved and clean the data
-    starting_eleven['Involved'] = starting_eleven['Involved'].str.split(',').str[:11]\
+    starting_eleven['InvolvedPlayers'] = starting_eleven['InvolvedPlayers'].str.split(',').str[:11]\
       .apply(lambda x: [name.strip() for name in x])  # Remove spaces
+    starting_eleven['PlayerPosition'] = starting_eleven['PlayerPosition'].str.split(',').str[:11]\
+      .apply(lambda x: [get_player_position(name.strip()) for name in x])  # Remove spaces
     
     # Explode 'Involved' column to get one row per player
-    starting_eleven = starting_eleven.explode('Involved')
+    starting_eleven = starting_eleven.explode(["InvolvedPlayers", "PlayerPosition"])
     starting_eleven = starting_eleven.reset_index(drop=True)\
-      .rename(columns={'Involved': 'player_id'})
+      .rename(columns={'InvolvedPlayers': 'player_id', "PlayerPosition": "position"})
     starting_eleven['start_time'] = 0
     
     # Get substitution events
-    sub_ons = match_events[match_events['type_id'] == player_on_id][['game_id', 'team_id', 'player_id', 'min']]\
-      .rename(columns={'min': 'start_time'}).reset_index(drop=True)
+    if from_processed:
+        # If already processed, use 'event_name' for substitutions
+        sub_ons = match_events[match_events['event_name'] == 'SubstitutionOn']\
+          .rename(columns={'minute': 'start_time'}).reset_index(drop=True)
+        sub_ons['player_id'] = sub_ons['player_id'].astype(str)
+        sub_offs = match_events[match_events['event_name'] == 'SubstitutionOff'][['game_id', 'team_id', 'player_id', 'minute']]\
+          .rename(columns={'minute': 'end_time'}).reset_index(drop=True)
+        sub_offs['player_id'] = sub_offs['player_id'].astype(str)
+    else:
+        # If not processed, use type_id for substitutions
+        sub_ons = match_events[match_events['type_id'] == player_on_id]\
+        .rename(columns={'min': 'start_time'}).reset_index(drop=True)
+        sub_offs = match_events[match_events['type_id'] == player_off_id][['game_id', 'team_id', 'player_id', 'min']]\
+        .rename(columns={'min': 'end_time'}).reset_index(drop=True)
     
-    sub_offs = match_events[match_events['type_id'] == player_off_id][['game_id', 'team_id', 'player_id', 'min']]\
-      .rename(columns={'min': 'end_time'}).reset_index(drop=True)
+    # get player position from substitution events
+    sub_ons = explode_event(sub_ons, player_on_id, 0, from_processed=from_processed)[['game_id', 'team_id', 'player_id', 'start_time', 'PlayerPosition']]\
+        .rename(columns={'PlayerPosition': 'position'}, inplace=True)
+
     
     # Combine starting eleven and substitutions
     play_time = pd.concat([starting_eleven, sub_ons], axis=0)
@@ -403,7 +477,7 @@ def calculate_player_playtime(match_events, min_playtime=30, clip_to_90=True):
     return play_time.reset_index(drop=True)
 
 
-def get_interceptions(match_events, successful_only=True, include_coordinates=True):
+def get_interceptions(match_events, successful_only=True, include_coordinates=True, from_processed=False):
     """
     Get interception actions for all players.
     
@@ -424,7 +498,10 @@ def get_interceptions(match_events, successful_only=True, include_coordinates=Tr
     interception_id = 8
     
     # Filter for interceptions
-    interceptions = match_events[match_events['type_id'] == interception_id]
+    if from_processed:
+        interceptions = match_events[match_events['event_name'] == 'Interception']
+    else:
+        interceptions = match_events[match_events['type_id'] == interception_id]
     
     if interceptions.empty:
         columns = ['game_id', 'team_id', 'player_id', 'event_name']
@@ -434,7 +511,10 @@ def get_interceptions(match_events, successful_only=True, include_coordinates=Tr
     
     # Filter for successful actions if requested
     if successful_only:
-        interceptions = interceptions[interceptions['outcome'] == 1]
+        if from_processed:
+            interceptions = interceptions[interceptions['outcome_type'] == 'Successful']
+        else:
+            interceptions = interceptions[interceptions['outcome'] == 1]
     
     # Select relevant columns
     columns = ['game_id', 'team_id', 'player_id', 'event_name']
@@ -444,7 +524,7 @@ def get_interceptions(match_events, successful_only=True, include_coordinates=Tr
     return interceptions[columns].reset_index(drop=True)
 
 
-def get_tackles(match_events, successful_only=True, include_coordinates=True):
+def get_tackles(match_events, successful_only=True, include_coordinates=True, from_processed=False):
     """
     Get tackle actions for all players.
     
@@ -465,7 +545,12 @@ def get_tackles(match_events, successful_only=True, include_coordinates=True):
     tackle_id = 7
     
     # Filter for tackles
-    tackles = match_events[match_events['type_id'] == tackle_id]
+    
+    # Filter for interceptions
+    if from_processed:
+        tackles = match_events[match_events['event_name'] == 'Tackle']
+    else:
+        tackles = match_events[match_events['type_id'] == tackle_id]
     
     if tackles.empty:
         columns = ['game_id', 'team_id', 'player_id', 'event_name']
@@ -475,7 +560,10 @@ def get_tackles(match_events, successful_only=True, include_coordinates=True):
     
     # Filter for successful actions if requested
     if successful_only:
-        tackles = tackles[tackles['outcome'] == 1]
+        if from_processed:
+            tackles = tackles[tackles['outcome_type'] == 'Successful']
+        else:
+            tackles = tackles[tackles['outcome'] == 1]
     
     # Select relevant columns
     columns = ['game_id', 'team_id', 'player_id', 'event_name']
@@ -485,7 +573,7 @@ def get_tackles(match_events, successful_only=True, include_coordinates=True):
     return tackles[columns].reset_index(drop=True)
 
 
-def get_aerials(match_events, successful_only=True, include_coordinates=True):
+def get_aerials(match_events, successful_only=True, include_coordinates=True, from_processed=False):
     """
     Get aerial duel actions for all players.
     
@@ -506,7 +594,10 @@ def get_aerials(match_events, successful_only=True, include_coordinates=True):
     aerial_id = 44
     
     # Filter for aerials
-    aerials = match_events[match_events['type_id'] == aerial_id]
+    if from_processed:
+        aerials = match_events[match_events['event_name'] == 'Aerial']
+    else:
+        aerials = match_events[match_events['type_id'] == aerial_id]
     
     if aerials.empty:
         columns = ['game_id', 'team_id', 'player_id', 'event_name']
@@ -516,7 +607,10 @@ def get_aerials(match_events, successful_only=True, include_coordinates=True):
     
     # Filter for successful actions if requested
     if successful_only:
-        aerials = aerials[aerials['outcome'] == 1]
+        if from_processed:
+            aerials = aerials[aerials['outcome_type'] == 'Successful']
+        else:
+            aerials = aerials[aerials['outcome'] == 1]
     
     # Select relevant columns
     columns = ['game_id', 'team_id', 'player_id', 'event_name']
@@ -525,7 +619,7 @@ def get_aerials(match_events, successful_only=True, include_coordinates=True):
     
     return aerials[columns].reset_index(drop=True)
 
-def get_dribbles(match_events, successful_only=True, include_coordinates=True):
+def get_dribbles(match_events, successful_only=True, include_coordinates=True, from_processed=False):
     """
     Get dribble (take on) actions for all players.
 
@@ -550,9 +644,15 @@ def get_dribbles(match_events, successful_only=True, include_coordinates=True):
         The DataFrame is indexed from 0.
     """
     dribble_id = 3
-    dribbles = match_events[match_events['type_id'] == dribble_id]
+    if from_processed:
+        dribbles = match_events[match_events['event_name'] == 'TakeOn']
+    else:
+        dribbles = match_events[match_events['type_id'] == dribble_id]
     if successful_only:
-        dribbles = dribbles[dribbles['outcome'] == 1]
+        if from_processed:
+            dribbles = dribbles[dribbles['outcome_type'] == 'Successful']
+        else:
+            dribbles = dribbles[dribbles['outcome'] == 1]
     dribbles = dribbles.copy()
     dribbles['event_name'] = 'dribble'
     columns = ['game_id', 'team_id', 'player_id', 'event_name']
@@ -560,7 +660,7 @@ def get_dribbles(match_events, successful_only=True, include_coordinates=True):
         columns.extend(['x', 'y'])
     return dribbles[columns].reset_index(drop=True)
 
-def get_shots_on_target(match_events, include_coordinates=True):
+def get_shots_on_target(match_events, include_coordinates=True, from_processed=False):
     """
     Extracts shots on target from a DataFrame of match events.
 
@@ -586,9 +686,13 @@ def get_shots_on_target(match_events, include_coordinates=True):
     """
     shots_saved_id = 15
     goals_id = 16
-    shots_saved = match_events[match_events['type_id'] == shots_saved_id]
-    goals = match_events[match_events['type_id'] == goals_id]
-    shots_saved = explode_event(shots_saved, shots_saved_id, 0)
+    if from_processed:
+        shots_saved = match_events[match_events['event_name'] == 'SavedShot']
+        goals = match_events[match_events['event_name'] == 'Goal']
+    else:
+        shots_saved = match_events[match_events['type_id'] == shots_saved_id]
+        goals = match_events[match_events['type_id'] == goals_id]
+    shots_saved = explode_event(shots_saved, shots_saved_id, 0, from_processed=from_processed)
     shots_saved = shots_saved[shots_saved['Blocked'] != 'yes']
     shots_on_target = pd.concat([
         shots_saved[['game_id', 'team_id', 'player_id', 'x', 'y']],
@@ -599,7 +703,7 @@ def get_shots_on_target(match_events, include_coordinates=True):
         shots_on_target = shots_on_target.drop(columns=['x', 'y'])
     return shots_on_target.reset_index(drop=True)
 
-def get_key_passes(match_events, successful_only=True, include_coordinates=True):
+def get_key_passes(match_events, successful_only=True, include_coordinates=True, from_processed=False):
     """
     Extracts key passes from a DataFrame of match events.
 
@@ -626,10 +730,18 @@ def get_key_passes(match_events, successful_only=True, include_coordinates=True)
         The DataFrame is indexed from 0.
     """
     pass_id = 1
-    passes_df = match_events[(match_events['type_id'] == pass_id)]
+    if from_processed:
+        passes_df = match_events[match_events['event_name'] == 'Pass']
+    else:
+        passes_df = match_events[(match_events['type_id'] == pass_id)]
     if successful_only:
-        passes_df = passes_df[passes_df['outcome'] == 1]
-    key_passes = passes_df[~passes_df['keypass'].isna()]
+        if from_processed:
+            passes_df = passes_df[passes_df['outcome_type'] == 'Successful']
+            key_passes = explode_event(passes_df, pass_id, 0, from_processed=from_processed)
+            key_passes = key_passes[key_passes['KeyPass'] == 'yes']
+        else:
+            passes_df = passes_df[passes_df['outcome'] == 1]
+            key_passes = passes_df[~passes_df['keypass'].isna()]
     key_passes['event_name'] = 'key_pass'
     columns = ['game_id', 'team_id', 'player_id', 'event_name']
     if include_coordinates:
@@ -640,7 +752,8 @@ def get_deep_completions(
     match_events,
     successful_only=True,
     length_deep_completion=20,
-    include_coordinates=True
+    include_coordinates=True,
+    from_processed=False
 ):
     """
     Extracts deep completions from a DataFrame of match events.
@@ -671,12 +784,18 @@ def get_deep_completions(
         The DataFrame is indexed from 0.
     """
     pass_id = 1
-    passes_df = match_events[(match_events['type_id'] == pass_id)]
+    if from_processed:
+        passes_df = match_events[match_events['event_name'] == 'Pass']
+    else:
+        passes_df = match_events[(match_events['type_id'] == pass_id)]
     if successful_only:
-        passes_df = passes_df[passes_df['outcome'] == 1]
-    passes_exploded = explode_event(passes_df, pass_id, 0.15)
-    passes_exploded['pass_end_x'] = passes_exploded['Pass End X'].astype('float')
-    passes_exploded['pass_end_y'] = passes_exploded['Pass End Y'].astype('float')
+        if from_processed:
+            passes_df = passes_df[passes_df['outcome_type'] == 'Successful']
+        else:
+            passes_df = passes_df[passes_df['outcome'] == 1]
+    passes_exploded = explode_event(passes_df, pass_id, 0.15, from_processed=from_processed)
+    passes_exploded['pass_end_x'] = passes_exploded['PassEndX'].astype('float')
+    passes_exploded['pass_end_y'] = passes_exploded['PassEndY'].astype('float')
     passes_exploded[['pass_progression', 'end_dist', 'start_half', 'end_half']] = passes_exploded.apply(
         lambda row: pd.Series(pass_length(row['x'], row['y'], row['pass_end_x'], row['pass_end_y'])), axis=1)
     deep_completion = passes_exploded[passes_exploded['end_dist'] < length_deep_completion]
@@ -686,51 +805,51 @@ def get_deep_completions(
         columns.extend(['x', 'y'])
     return deep_completion[columns].reset_index(drop=True)
 
-def get_progressive_passes(match_events, successful_only=True, length_threshold=[30, 15, 10], include_coordinates=True):
-    def get_progressive_passes(
-        match_events,
-        successful_only=True,
-        length_threshold=[30, 15, 10],
-        include_coordinates=True
-    ):
-        """
-        Extracts progressive passes from a DataFrame of match events.
+def get_progressive_passes(match_events, successful_only=True, length_threshold=[30, 15, 10], include_coordinates=True, from_processed=False):
+    """
+    Extracts progressive passes from a DataFrame of match events.
 
-        A progressive pass is defined as a pass that moves the ball significantly closer to the opponent's goal,
-        based on the starting and ending halves of the pitch and configurable distance thresholds.
+    A progressive pass is defined as a pass that moves the ball significantly closer to the opponent's goal,
+    based on the starting and ending halves of the pitch and configurable distance thresholds.
 
-        Args:
-            match_events (pd.DataFrame): DataFrame containing event data for a match, including pass events.
-            successful_only (bool, optional): If True, only considers successful passes. Defaults to True.
-            length_threshold (list of float, optional): Minimum progression distances (in meters or pitch units) for a pass to be considered progressive, depending on the start and end halves:
-                - [0]: Defensive half to defensive half
-                - [1]: Defensive half to attacking half
-                - [2]: Attacking half to attacking half
-                Defaults to [30, 15, 10].
-            include_coordinates (bool, optional): If True, includes the starting coordinates ('x', 'y') of the pass in the output. Defaults to True.
+    Args:
+        match_events (pd.DataFrame): DataFrame containing event data for a match, including pass events.
+        successful_only (bool, optional): If True, only considers successful passes. Defaults to True.
+        length_threshold (list of float, optional): Minimum progression distances (in meters or pitch units) for a pass to be considered progressive, depending on the start and end halves:
+            - [0]: Defensive half to defensive half
+            - [1]: Defensive half to attacking half
+            - [2]: Attacking half to attacking half
+            Defaults to [30, 15, 10].
+        include_coordinates (bool, optional): If True, includes the starting coordinates ('x', 'y') of the pass in the output. Defaults to True.
 
-        Returns:
-            pd.DataFrame: DataFrame containing progressive passes with columns:
-                - 'game_id'
-                - 'team_id'
-                - 'player_id'
-                - 'event_name' (set to 'progressive_pass')
-                - 'x', 'y' (if include_coordinates is True)
-            The DataFrame is indexed from 0.
+    Returns:
+        pd.DataFrame: DataFrame containing progressive passes with columns:
+            - 'game_id'
+            - 'team_id'
+            - 'player_id'
+            - 'event_name' (set to 'progressive_pass')
+            - 'x', 'y' (if include_coordinates is True)
+        The DataFrame is indexed from 0.
 
-        Notes:
-            - Relies on helper functions `explode_event` and `pass_length` to process and calculate pass progression.
-            - Assumes the input DataFrame contains columns: 'type_id', 'outcome', 'Pass End X', 'Pass End Y', 'x', 'y', 'game_id', 'team_id', 'player_id'.
-            - The function filters passes based on their progression distance and the halves of the pitch they start and end in.
-        """
-        # function implementation...
+    Notes:
+        - Relies on helper functions `explode_event` and `pass_length` to process and calculate pass progression.
+        - Assumes the input DataFrame contains columns: 'type_id', 'outcome', 'Pass End X', 'Pass End Y', 'x', 'y', 'game_id', 'team_id', 'player_id'.
+        - The function filters passes based on their progression distance and the halves of the pitch they start and end in.
+    """
+    # function implementation...
     pass_id = 1
-    passes_df = match_events[(match_events['type_id'] == pass_id)]
+    if from_processed:
+        passes_df = match_events[match_events['event_name'] == 'Pass']
+    else:
+        passes_df = match_events[(match_events['type_id'] == pass_id)]
     if successful_only:
-        passes_df = passes_df[passes_df['outcome'] == 1]
-    passes_exploded = explode_event(passes_df, pass_id, 0.15)
-    passes_exploded['pass_end_x'] = passes_exploded['Pass End X'].astype('float')
-    passes_exploded['pass_end_y'] = passes_exploded['Pass End Y'].astype('float')
+        if from_processed:
+            passes_df = passes_df[passes_df['outcome_type'] == 'Successful']
+        else:
+            passes_df = passes_df[passes_df['outcome'] == 1]
+    passes_exploded = explode_event(passes_df, pass_id, 0.15, from_processed=from_processed)
+    passes_exploded['pass_end_x'] = passes_exploded['PassEndX'].astype('float')
+    passes_exploded['pass_end_y'] = passes_exploded['PassEndY'].astype('float')
     passes_exploded[['pass_progression', 'end_dist', 'start_half', 'end_half']] = passes_exploded.apply(
         lambda row: pd.Series(pass_length(row['x'], row['y'], row['pass_end_x'], row['pass_end_y'])), axis=1)
     progressive_passes = passes_exploded[
