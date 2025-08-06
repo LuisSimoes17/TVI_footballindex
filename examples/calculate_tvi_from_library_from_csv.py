@@ -3,7 +3,8 @@ from tvi_footballindex.parsing import f24_parser
 from tvi_footballindex.tvi import calculator
 
 # Define paths
-f24_file_path = "examples/data/F24 - CSVs/PRT-PrimeiraLiga_24-25_events.csv"
+file_name = "ENG-Premier League_24-25"
+f24_file_path = f"examples/data/F24 - CSVs/{file_name}_events.csv"
 
 # 1. Parse F24 data
 print("Parsing F24 data...")
@@ -52,6 +53,9 @@ player_names.rename(
 )
 aggregated_tvi['player_id'] = aggregated_tvi['player_id'].astype(int)
 tvi_final = pd.merge(player_names, aggregated_tvi, on='player_id', how='right')
+
+# write the final DataFrame to a CSV file
+tvi_final.sort_values('TVI', ascending=False).to_csv(f"./examples/data/output/{file_name}_TVI.csv", index=False)
 
 # Filter out goalkeepers and players with low playtime
 tvi_final = tvi_final[tvi_final['position'] != 'Goalkeeper']
