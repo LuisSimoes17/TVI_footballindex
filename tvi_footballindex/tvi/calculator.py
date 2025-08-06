@@ -22,7 +22,7 @@ def calculate_tvi(
                                    must be equal to rows * columns. Defaults to [2, 1, 2, 4, 3, 4, 6, 5, 6].
 
     Returns:
-        pd.DataFrame: DataFrame with TVI and action diversity for each player.
+        pd.DataFrame: DataFrame with entropy-based TVI and Shannon entropy for each player.
     """
     # Assign zones to each event
     all_metric_events['zone'] = all_metric_events.apply(
@@ -46,8 +46,18 @@ def calculate_tvi(
     event_zone_cols = [col for col in tvi.columns if col not in ['game_id', 'team_id', 'player_id']]
     tvi['action_diversity'] = tvi[event_zone_cols].clip(upper=1).sum(axis=1)
 
+    # Calculate Shannon entropy for each player's action+zone distribution
+    def calculate_player_entropy(row):
+        counts = row[event_zone_cols].values
+        return helpers.calculate_shannon_entropy(counts)
+    tvi['shannon_entropy'] = tvi.apply(calculate_player_entropy, axis=1)
+
     # Merge with playtime data
     tvi = pd.merge(tvi, player_playtime, on=['game_id', 'team_id', 'player_id'], how='right').fillna(0)
+
+    # Calculate entropy-based TVI score
+    tvi['TVI_entropy'] = tvi['shannon_entropy'] / tvi['play_time']
+    tvi['TVI_entropy'] = tvi['TVI_entropy'].clip(upper=1)
 
     # Calculate TVI score
     tvi['TVI'] = C * tvi['action_diversity'] / tvi['play_time']
@@ -104,3 +114,30 @@ def aggregate_tvi_by_player(
     tvi_final = tvi_final.rename(columns={'main_position': 'position'})
 
     return tvi_final.sort_values('TVI', ascending=False)
+
+
+# Comparison function to analyze the difference between approaches
+def compare_tvi_approaches(tvi_df):
+    """
+    Compare the original TVI with the Shannon entropy approach.
+    
+    Returns:
+        pd.DataFrame: Analysis of how the two approaches differ
+    """
+    comparison = tvi_df[['player_id', 'TVI_original', 'TVI_entropy', 'action_diversity', 'shannon_entropy', 'play_time']].copy()
+    
+    # Calculate rank differences
+    comparison['rank_original'] = comparison['TVI_original'].rank(ascending=False)
+    comparison['rank_entropy'] = comparison['TVI_entropy'].rank(ascending=False)
+    comparison['rank_difference'] = comparison['rank_entropy'] - comparison['rank_original']
+    
+    # Calculate correlation
+    correlation = comparison['TVI_original'].corr(comparison['TVI_entropy'])
+    
+    print(f"Correlation between original TVI and entropy TVI: {correlation:.3f}")
+    print(f"Players with biggest ranking improvements using entropy: ")
+    print(comparison.nsmallest(5, 'rank_difference')[['player_id', 'rank_difference', 'TVI_original', 'TVI_entropy']])
+    print(f"\nPlayers with biggest ranking drops using entropy: ")
+    print(comparison.nlargest(5, 'rank_difference')[['player_id', 'rank_difference', 'TVI_original', 'TVI_entropy']])
+    
+    return comparison

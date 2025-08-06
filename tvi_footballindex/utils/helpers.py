@@ -1,5 +1,5 @@
 import numpy as np
-
+import math
 
 def assign_zones(x, y, x_min_max=(0, 100), y_min_max=(0, 100), 
                 zone_map=[[2, 4, 6],
@@ -116,3 +116,24 @@ def weighted_avg(df, weight_column):
     if total_weight == 0:
         return None
     return weighted_sum / total_weight
+
+
+def calculate_shannon_entropy(counts):
+    """Calculate Shannon entropy for a distribution of counts."""
+    # Ensure we're working with a numpy array
+    counts = np.array(counts, dtype=float)
+    
+    if len(counts) == 0 or np.sum(counts) == 0:
+        return 0.0
+    
+    # Convert to probabilities
+    probabilities = counts / np.sum(counts)
+    # Remove zero probabilities to avoid log(0)
+    probabilities = probabilities[probabilities > 0]
+    
+    if len(probabilities) == 0:
+        return 0.0
+    
+    # Calculate Shannon entropy using natural log, then convert to bits
+    # H = -sum(p * ln(p)) / ln(2)
+    return float(-np.sum(probabilities * np.log(probabilities)) / np.log(2))
