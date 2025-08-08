@@ -2,142 +2,122 @@ import pandas as pd
 from tvi_footballindex.utils import helpers
 
 def calculate_tvi(
-    all_metric_events,
-    player_playtime,
+    events_df,
+    playtime_df,
+    player_id_col='player_id',
+    event_name_col='event_name',
+    x_col='x',
+    y_col='y',
+    game_id_col='game_id',
+    team_id_col='team_id',
+    playtime_col='play_time',
     C=90/44,
     zone_map=[[2, 4, 6],
-            [1, 3, 5], 
-            [2, 4, 6]]
+              [1, 3, 5], 
+              [2, 4, 6]]
 ):
     """
-    Calculate the Total Value Index (TVI) for players based on pre-calculated metric events and playtime.
+    Calculate the Total Value Index (TVI) for players based on their on-field actions and playtime.
+
+    This function is designed to be flexible and can work with any DataFrame as long as the required columns are specified.
 
     Args:
-        all_metric_events (pd.DataFrame): DataFrame containing player actions with x and y coordinates.
-                                          Expected columns: ['game_id', 'team_id', 'player_id', 'event_name', 'x', 'y'].
-        player_playtime (pd.DataFrame): DataFrame with columns ['game_id', 'team_id', 'player_id', 'play_time'].
+        events_df (pd.DataFrame): DataFrame containing player actions with x and y coordinates.
+        playtime_df (pd.DataFrame): DataFrame with player playtime information.
+        player_id_col (str, optional): Name of the column for player IDs. Defaults to 'player_id'.
+        event_name_col (str, optional): Name of the column for event names. Defaults to 'event_name'.
+        x_col (str, optional): Name of the column for the x-coordinate of the event. Defaults to 'x'.
+        y_col (str, optional): Name of the column for the y-coordinate of the event. Defaults to 'y'.
+        game_id_col (str, optional): Name of the column for game IDs. Defaults to 'game_id'.
+        team_id_col (str, optional): Name of the column for team IDs. Defaults to 'team_id'.
+        playtime_col (str, optional): Name of the column for playtime. Defaults to 'play_time'.
         C (float, optional): Scaling constant for TVI calculation. Defaults to 90/44.
-        grid_shape (tuple, optional): The shape of the grid as (rows, columns). Defaults to (3, 3).
-        zone_map (list, optional): A list that maps the grid index to a specific zone number. The length of the list
-                                   must be equal to rows * columns. Defaults to [2, 1, 2, 4, 3, 4, 6, 5, 6].
+        zone_map (list, optional): A list that maps the grid index to a specific zone number. 
+                                   Defaults to a 3x3 grid.
 
     Returns:
-        pd.DataFrame: DataFrame with entropy-based TVI and Shannon entropy for each player.
+        pd.DataFrame: DataFrame with TVI scores and other metrics for each player.
     """
     # Assign zones to each event
-    all_metric_events['zone'] = all_metric_events.apply(
-        lambda row: helpers.assign_zones(row['x'], row['y'], zone_map=zone_map), axis=1
+    events_df['zone'] = events_df.apply(
+        lambda row: helpers.assign_zones(row[x_col], row[y_col], zone_map=zone_map), axis=1
     )
 
     # Group by event type and zone
-    all_metric_events = all_metric_events.groupby(
-        ['game_id', 'team_id', 'player_id', 'event_name', 'zone']
+    events_df = events_df.groupby(
+        [game_id_col, team_id_col, player_id_col, event_name_col, 'zone']
     ).size().reset_index(name='count')
 
-    # Pivot the data to have one row per player per match, with action counts as columns
-    all_metric_events['event_zone'] = all_metric_events['event_name'] + '_' + all_metric_events['zone'].astype(str)
-    tvi = all_metric_events.pivot_table(
-        index=['game_id', 'team_id', 'player_id'],
+    # Pivot the data
+    events_df['event_zone'] = events_df[event_name_col] + '_' + events_df['zone'].astype(str)
+    tvi = events_df.pivot_table(
+        index=[game_id_col, team_id_col, player_id_col],
         columns=['event_zone'],
         values='count'
     ).fillna(0).reset_index()
 
-    # Calculate action diversity (number of unique action types performed)
-    event_zone_cols = [col for col in tvi.columns if col not in ['game_id', 'team_id', 'player_id']]
+    # Calculate action diversity
+    event_zone_cols = [col for col in tvi.columns if col not in [game_id_col, team_id_col, player_id_col]]
     tvi['action_diversity'] = tvi[event_zone_cols].clip(upper=1).sum(axis=1)
 
-    # Calculate Shannon entropy for each player's action+zone distribution
+    # Calculate Shannon entropy
     def calculate_player_entropy(row):
         counts = row[event_zone_cols].values
         return helpers.calculate_shannon_entropy(counts)
     tvi['shannon_entropy'] = tvi.apply(calculate_player_entropy, axis=1)
 
     # Merge with playtime data
-    tvi = pd.merge(tvi, player_playtime, on=['game_id', 'team_id', 'player_id'], how='right').fillna(0)
+    tvi = pd.merge(tvi, playtime_df, on=[game_id_col, team_id_col, player_id_col], how='right').fillna(0)
 
-    # Calculate entropy-based TVI score
-    tvi['TVI_entropy'] = tvi['shannon_entropy'] / tvi['play_time']
+    # Calculate TVI scores
+    tvi['TVI_entropy'] = tvi['shannon_entropy'] / tvi[playtime_col]
     tvi['TVI_entropy'] = tvi['TVI_entropy'].clip(upper=1)
-
-    # Calculate TVI score
-    tvi['TVI'] = C * tvi['action_diversity'] / tvi['play_time']
+    tvi['TVI'] = C * tvi['action_diversity'] / tvi[playtime_col]
     tvi['TVI'] = tvi['TVI'].clip(upper=1)
 
     return tvi
 
-
 def aggregate_tvi_by_player(
-    tvi_df
+    tvi_df,
+    player_id_col='player_id',
+    playtime_col='play_time',
+    position_col='position'
 ):
     """
-    Aggregates TVI (Total Value Index) metrics by player from a DataFrame containing per-match or per-event football statistics.
-    This function processes the input DataFrame by:
-    - Grouping the data by player and computing a weighted average of the metrics using play time as the weight.
-    - Merging the total play time per player.
-    - Reordering and selecting relevant columns for the final output.
+    Aggregates TVI metrics by player.
+
     Args:
-        tvi_df (pd.DataFrame): Input DataFrame with columns for player actions per zone, 'player_id', 'team_id', 'game_id', 'play_time', 'action_diversity', and 'TVI'.
+        tvi_df (pd.DataFrame): DataFrame with TVI scores from the calculate_tvi function.
+        player_id_col (str, optional): Name of the column for player IDs. Defaults to 'player_id'.
+        playtime_col (str, optional): Name of the column for playtime. Defaults to 'play_time'.
+        position_col (str, optional): Name of the column for player positions. Defaults to 'position'.
+
     Returns:
-        pd.DataFrame: Aggregated DataFrame with one row per player, including summed and weighted metrics, sorted by 'TVI' in descending order.
-    Notes:
-        - Requires the 'helpers.weighted_avg' function to be defined elsewhere.
-        - Assumes the presence of pandas as pd.
-        - The 'position' field will show the position where the player spent most time.
-
+        pd.DataFrame: Aggregated DataFrame with one row per player.
     """
-
     tvi_final = tvi_df.copy()
 
-    tvi_final = tvi_final.drop(columns=['team_id', 'game_id', 'position'])\
-        .groupby(['player_id']).apply(helpers.weighted_avg, weight_column='play_time').reset_index()
+    # Weighted average of metrics
+    tvi_final = tvi_final.drop(columns=['team_id', 'game_id', position_col])\
+        .groupby([player_id_col]).apply(helpers.weighted_avg, weight_column=playtime_col).reset_index()
     
-    # Find the position where each player spent the most time
-    position_time = tvi_df.groupby(['player_id', 'position'])['play_time'].sum().reset_index()
-    
-    # Get the position with maximum play time for each player
+    # Most played position
+    position_time = tvi_df.groupby([player_id_col, position_col])[playtime_col].sum().reset_index()
     most_played_position = position_time.loc[
-        position_time.groupby('player_id')['play_time'].idxmax()
-    ][['player_id', 'position']].rename(columns={'position': 'main_position'})
+        position_time.groupby(player_id_col)[playtime_col].idxmax()
+    ][[player_id_col, position_col]].rename(columns={position_col: 'main_position'})
 
-    total_play_time = tvi_df.groupby(['player_id'])['play_time'].sum().reset_index()
-    total_play_time = total_play_time.rename(columns={'play_time': 'total_play_time'})
+    # Total playtime
+    total_play_time = tvi_df.groupby([player_id_col])[playtime_col].sum().reset_index()
+    total_play_time = total_play_time.rename(columns={playtime_col: 'total_play_time'})
 
-    # Merge everything together
-    tvi_final = pd.merge(tvi_final, most_played_position, on=['player_id'], how='left')
-    tvi_final = pd.merge(tvi_final, total_play_time, on=['player_id'], how='left')
+    # Merge data
+    tvi_final = pd.merge(tvi_final, most_played_position, on=[player_id_col], how='left')
+    tvi_final = pd.merge(tvi_final, total_play_time, on=[player_id_col], how='left')
 
-    # Update the play_time column to reflect total play time
-    tvi_final['play_time'] = tvi_final['total_play_time']
+    # Final adjustments
+    tvi_final[playtime_col] = tvi_final['total_play_time']
     tvi_final = tvi_final.drop(columns=['total_play_time'])
-
-    # Rename main_position back to position for consistency
-    tvi_final = tvi_final.rename(columns={'main_position': 'position'})
+    tvi_final = tvi_final.rename(columns={'main_position': position_col})
 
     return tvi_final.sort_values('TVI', ascending=False)
-
-
-# Comparison function to analyze the difference between approaches
-def compare_tvi_approaches(tvi_df):
-    """
-    Compare the original TVI with the Shannon entropy approach.
-    
-    Returns:
-        pd.DataFrame: Analysis of how the two approaches differ
-    """
-    comparison = tvi_df[['player_id', 'TVI_original', 'TVI_entropy', 'action_diversity', 'shannon_entropy', 'play_time']].copy()
-    
-    # Calculate rank differences
-    comparison['rank_original'] = comparison['TVI_original'].rank(ascending=False)
-    comparison['rank_entropy'] = comparison['TVI_entropy'].rank(ascending=False)
-    comparison['rank_difference'] = comparison['rank_entropy'] - comparison['rank_original']
-    
-    # Calculate correlation
-    correlation = comparison['TVI_original'].corr(comparison['TVI_entropy'])
-    
-    print(f"Correlation between original TVI and entropy TVI: {correlation:.3f}")
-    print(f"Players with biggest ranking improvements using entropy: ")
-    print(comparison.nsmallest(5, 'rank_difference')[['player_id', 'rank_difference', 'TVI_original', 'TVI_entropy']])
-    print(f"\nPlayers with biggest ranking drops using entropy: ")
-    print(comparison.nlargest(5, 'rank_difference')[['player_id', 'rank_difference', 'TVI_original', 'TVI_entropy']])
-    
-    return comparison

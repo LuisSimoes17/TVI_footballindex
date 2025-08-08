@@ -34,10 +34,10 @@ all_metric_events = pd.concat([
 ])
 all_metric_events['player_id'] = all_metric_events['player_id'].astype(int).astype(str)
 
-# Calculate TVI with the custom grid
+# Calculate TVI
 tvi_df = calculator.calculate_tvi(
-    all_metric_events, 
-    play_time
+    events_df=all_metric_events, 
+    playtime_df=play_time
 )
 
 # Aggregate TVI by player
