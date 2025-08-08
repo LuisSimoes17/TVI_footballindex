@@ -29,7 +29,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "Intended Audience :: Sports Analysts",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
@@ -37,7 +36,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Games/Entertainment :: Sport",
+    "Topic :: Games/Entertainment",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
