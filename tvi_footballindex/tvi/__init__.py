@@ -7,10 +7,12 @@ which measures a player's or team's tactical adaptability and flexibility.
 
 from .calculator import (
     calculate_tvi,
-    aggregate_tvi_by_player,
+    aggregate_tvi_by_player, 
+    validate_data_format
 )
 
 __all__ = [
     'calculate_tvi',
-    'aggregate_tvi_by_player',
+    'aggregate_tvi_by_player', 
+    'validate_data_format'
 ]

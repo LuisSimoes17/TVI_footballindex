@@ -3,111 +3,200 @@
 [![PyPI version](https://badge.fury.io/py/tvi-footballindex.svg)](https://badge.fury.io/py/tvi-footballindex)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This project provides a Python library for calculating the **Tactical Versatility Index (TVI)**, a metric designed to quantify a player's ability to perform various actions across different zones of the football pitch. The library is built to be flexible and customizable, allowing for in-depth analysis of player performance.
+A Python library for calculating the **Tactical Versatility Index (TVI)**, a metric that quantifies a player's ability to perform various actions across different zones of the football pitch. TVI measures how versatile a player is by analyzing their action diversity and spatial coverage.
 
-## Key Features
+## What is TVI?
 
-- **Flexible TVI Calculator**: The core of the library, designed to work with any data source.
-- **Customizable Zone Grid**: Define your own pitch zones for tailored analysis.
-- **Pandas Integration**: Built on top of pandas for seamless data manipulation.
-- **Wyscout F24 Parser**: A convenience module for parsing F24 XML data.
+The Tactical Versatility Index measures player versatility by:
+- **Action Diversity**: How many different types of actions a player performs
+- **Spatial Coverage**: How many different pitch zones a player is active in
+- **Time Normalization**: Adjusting for actual playing time
+
+Higher TVI scores indicate more versatile players who contribute across multiple areas and action types.
 
 ## Installation
-
-You can install the TVI Football Index library directly from PyPI:
 
 ```bash
 pip install tvi-footballindex
 ```
 
-## Quick Start with Custom Data
+## Quick Start
 
-The main strength of this library is its ability to calculate the TVI from any events DataFrame. Here's how you can use it with your own data:
+### Basic Example with Sample Data
 
 ```python
 import pandas as pd
-from tvi_footballindex.tvi import calculator
+from tvi_footballindex.tvi.calculator import calculate_tvi, aggregate_tvi_by_player
 
-# Assume you have a DataFrame with event data and another with playtime data
-# events_df should have columns for player_id, event_name, x, and y
-# playtime_df should have columns for player_id and play_time
+# Create sample event data
+events_df = pd.DataFrame({
+    'player_id': [1, 1, 2, 2, 1, 2],
+    'event_name': ['pass', 'dribble', 'shot', 'pass', 'tackle', 'interception'],
+    'x': [30, 60, 80, 70, 20, 40],  # x-coordinate (0-100)
+    'y': [50, 40, 60, 30, 50, 20],  # y-coordinate (0-100)
+    'game_id': [1, 1, 1, 1, 1, 1],
+    'team_id': [101, 101, 102, 102, 101, 102]
+})
 
-# Sample DataFrames (replace with your actual data)
-events_data = {
-    'player_id': [1, 1, 2, 2, 1],
-    'event_name': ['pass', 'dribble', 'shot', 'pass', 'tackle'],
-    'x': [50, 60, 80, 70, 20],
-    'y': [50, 40, 60, 30, 50],
-    'game_id': [1, 1, 1, 1, 1],
-    'team_id': [101, 101, 102, 102, 101]
-}
-events_df = pd.DataFrame(events_data)
-
-playtime_data = {
+# Create playtime data (in minutes)
+playtime_df = pd.DataFrame({
     'player_id': [1, 2],
-    'play_time': [90, 90],
+    'play_time': [90, 75],
     'game_id': [1, 1],
     'team_id': [101, 102]
-}
-playtime_df = pd.DataFrame(playtime_data)
+})
 
 # Calculate TVI
-tvi_df = calculator.calculate_tvi(events_df, playtime_df)
+tvi_results = calculate_tvi(events_df, playtime_df)
+print("Game-level TVI:")
+print(tvi_results[['player_id', 'action_diversity', 'TVI']].head())
 
-# Aggregate TVI by player
-aggregated_tvi = calculator.aggregate_tvi_by_player(tvi_df)
-
-# Display results
-print(aggregated_tvi)
+# Aggregate across all games for each player
+player_tvi = aggregate_tvi_by_player(tvi_results)
+print("\nPlayer-level TVI:")
+print(player_tvi[['player_id', 'action_diversity', 'TVI']].head())
 ```
 
-## Parsing F24 Data (Optional)
+### Required Data Format
 
-If you work with Wyscout F24 data, you can use the parsing module to extract the necessary information.
+Your data needs two DataFrames:
+
+**Events DataFrame** must contain:
+- `player_id`: Unique player identifier
+- `event_name`: Type of action (e.g., 'pass', 'shot', 'tackle')
+- `x`, `y`: Coordinates on the pitch (0-100 scale recommended)
+- `game_id`: Game identifier
+- `team_id`: Team identifier
+
+**Playtime DataFrame** must contain:
+- `player_id`: Unique player identifier  
+- `play_time`: Minutes played in the game
+- `game_id`: Game identifier
+- `team_id`: Team identifier
+
+## Customization
+
+### Custom Column Names
+
+If your data uses different column names:
 
 ```python
-import pandas as pd
-from tvi_footballindex.parsing import f24_parser
-from tvi_footballindex.tvi import calculator
-
-# Define paths
-F24_FOLDER_PATH = "path/to/your/F24_folder"
-
-# 1. Parse F24 data
-event_df = f24_parser.parsef24_folder(F24_FOLDER_PATH)
-
-# 2. Calculate player playtime
-play_time = f24_parser.calculate_player_playtime(event_df, min_playtime=30)
-
-# 3. Get all relevant actions
-interceptions = f24_parser.get_interceptions(event_df)
-tackles = f24_parser.get_tackles(event_df)
-aerials = f24_parser.get_aerials(event_df)
-progressive_passes = f24_parser.get_progressive_passes(event_df)
-dribbles = f24_parser.get_dribbles(event_df)
-key_passes = f24_parser.get_key_passes(event_df)
-deep_completions = f24_parser.get_deep_completions(event_df)
-shots_on_target = f24_parser.get_shots_on_target(event_df)
-
-# 4. Combine all actions into a single DataFrame
-all_metric_events = pd.concat([
-    interceptions, tackles, aerials, progressive_passes, dribbles, key_passes, deep_completions, shots_on_target
-])
-
-# 5. Calculate TVI
-tvi_df = calculator.calculate_tvi(all_metric_events, play_time)
-
-# 6. Aggregate TVI by player
-aggregated_tvi = calculator.aggregate_tvi_by_player(tvi_df)
-
-# 7. Display results
-print(aggregated_tvi.head(20))
+tvi_results = calculate_tvi(
+    events_df, 
+    playtime_df,
+    player_id_col='player_uuid',
+    event_name_col='action_type',
+    x_col='pos_x',
+    y_col='pos_y'
+)
 ```
+
+### Custom Pitch Zones
+
+The default creates a 3×3 grid (9 zones). You can customize this:
+
+```python
+# Create a 4×4 grid with 16 zones
+custom_zones = [
+    [1, 2, 3, 4],
+    [5, 6, 7, 8], 
+    [9, 10, 11, 12],
+    [13, 14, 15, 16]
+]
+
+tvi_results = calculate_tvi(
+    events_df, 
+    playtime_df, 
+    zone_map=custom_zones
+)
+```
+
+### Scaling Factor
+
+Adjust the TVI scaling constant (default is ~2.05):
+
+```python
+tvi_results = calculate_tvi(
+    events_df, 
+    playtime_df,
+    C=3.0  # Higher values increase TVI scores
+)
+```
+
+## Working with F24 Data
+
+If you have Wyscout F24 XML files:
+
+```python
+from tvi_footballindex.parsing import f24_parser
+
+# Parse F24 files from a folder
+events_df = f24_parser.parsef24_folder("path/to/f24_folder")
+
+# Calculate playtime (minimum 30 minutes to be included)
+playtime_df = f24_parser.calculate_player_playtime(events_df, min_playtime=30)
+
+# Extract specific action types
+passes = f24_parser.get_progressive_passes(events_df)
+dribbles = f24_parser.get_dribbles(events_df)
+shots = f24_parser.get_shots_on_target(events_df)
+# ... other action extractors available
+
+# Combine all actions
+all_actions = pd.concat([passes, dribbles, shots])
+
+# Calculate TVI
+tvi_results = calculate_tvi(all_actions, playtime_df)
+```
+
+## Understanding the Results
+
+The main metrics returned are:
+
+- **`action_diversity`**: Number of unique action-zone combinations
+- **`TVI`**: Main versatility score (0-1, higher = more versatile)  
+- **`TVI_entropy`**: Alternative entropy-based score (optional)
+- **`shannon_entropy`**: Raw entropy of action distribution
+
+## API Reference
+
+### Core Functions
+
+#### `calculate_tvi(events_df, playtime_df, **kwargs)`
+Calculate TVI scores for each player in each game.
+
+**Parameters:**
+- `events_df` (DataFrame): Event data with coordinates
+- `playtime_df` (DataFrame): Playing time data
+- `player_id_col` (str): Column name for player IDs (default: 'player_id')
+- `event_name_col` (str): Column name for event types (default: 'event_name') 
+- `x_col`, `y_col` (str): Column names for coordinates (default: 'x', 'y')
+- `C` (float): Scaling constant (default: 90/44 ≈ 2.05)
+- `zone_map` (list): Grid defining pitch zones
+
+**Returns:** DataFrame with TVI scores per player per game
+
+#### `aggregate_tvi_by_player(tvi_df, **kwargs)`
+Aggregate game-level TVI into player-level statistics.
+
+**Parameters:**
+- `tvi_df` (DataFrame): Output from `calculate_tvi()`
+- `player_id_col` (str): Column name for player IDs
+- `playtime_col` (str): Column name for playtime
+
+**Returns:** DataFrame with aggregated TVI per player
+
+## Examples and Use Cases
+
+- **Squad Analysis**: Compare versatility across your team
+- **Recruitment**: Identify versatile players in other teams  
+- **Tactical Analysis**: Understand how formation changes affect versatility
+- **Player Development**: Track versatility improvement over time
 
 ## Contributing
 
-Contributions are welcome! If you have any suggestions, bug reports, or feature requests, please open an issue or submit a pull request.
+Contributions welcome! Please feel free to submit issues or pull requests.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
